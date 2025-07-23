@@ -556,6 +556,7 @@ class FreedcampMCP:
                               include_tags: bool = False) -> Dict:
         """Get tasks for a specific project with enhanced filtering"""
         params = {
+            "project_id": project_id,
             "limit": str(limit),
             "offset": str(offset)
         }
@@ -574,7 +575,7 @@ class FreedcampMCP:
         if include_tags:
             params["f_include_tags"] = "1"
         
-        response = await self._make_request("GET", f"tasks?project_id={project_id}", params)
+        response = await self._make_request("GET", "tasks", params)
         
         tasks = []
         meta = {}
@@ -615,7 +616,10 @@ class FreedcampMCP:
         
         # Filter out completed tasks if not requested
         if not include_completed:
-            params["status[]"] = ["0", "2"]  # not started and in progress
+            # Add multiple status values for not completed tasks
+            status_values = ["0", "2"]  # not started and in progress
+            for i, status in enumerate(status_values):
+                params[f"status[{i}]"] = status
         
         if include_custom_fields:
             params["f_cf"] = "1"
