@@ -484,17 +484,17 @@ class FreedcampMCP:
         
         # Status filter (0=not started, 1=completed, 2=in progress)
         if status_filter:
-            for status in status_filter:
-                params[f"status[]"] = status
+            for i, status in enumerate(status_filter):
+                params[f"status[{i}]"] = status
         
         # Assignment filters
         if assigned_to_ids:
-            for user_id in assigned_to_ids:
-                params[f"assigned_to_id[]"] = user_id
+            for i, user_id in enumerate(assigned_to_ids):
+                params[f"assigned_to_id[{i}]"] = user_id
         
         if created_by_ids:
-            for user_id in created_by_ids:
-                params[f"created_by_id[]"] = user_id
+            for i, user_id in enumerate(created_by_ids):
+                params[f"created_by_id[{i}]"] = user_id
         
         # Date filters (YYYY-MM-DD format)
         if due_date_from:
@@ -563,11 +563,11 @@ class FreedcampMCP:
         
         # Add status filter if provided
         if status == "incomplete":
-            params["status[]"] = "0"
+            params["status[0]"] = "0"
         elif status == "complete":
-            params["status[]"] = "1"
+            params["status[0]"] = "1"
         elif status == "in_progress":
-            params["status[]"] = "2"
+            params["status[0]"] = "2"
         
         # Custom fields and tags
         if include_custom_fields:
