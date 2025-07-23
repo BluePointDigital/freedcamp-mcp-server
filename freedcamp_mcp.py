@@ -163,8 +163,8 @@ class FreedcampMCP:
         """Essential project fields for discovery - just what's needed to dig deeper"""
         return {
             "id": project["id"],
-            "name": project["project_name"],
-            "group": project.get("group_name", "Ungrouped")
+            "name": project.get("name", project.get("project_name", "Unnamed Project")),
+            "group": project.get("group", project.get("group_name", "Ungrouped"))
         }
     
     def _format_minimal_task(self, task: Dict) -> Dict:
