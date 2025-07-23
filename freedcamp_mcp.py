@@ -155,177 +155,36 @@ class FreedcampMCP:
 
     # ====== SUMMARY FORMATTING METHODS ======
     
-    def _format_task_summary(self, task: Dict) -> Dict:
-        """Format a task with only essential fields for summary display"""
+
+
+    # ====== MINIMAL JSON FORMATTERS ======
+    
+    def _format_minimal_project(self, project: Dict) -> Dict:
+        """Essential project fields for discovery - just what's needed to dig deeper"""
+        return {
+            "id": project["id"],
+            "name": project["project_name"],
+            "group": project.get("group_name", "Ungrouped")
+        }
+    
+    def _format_minimal_task(self, task: Dict) -> Dict:
+        """Essential task fields for discovery"""
         return {
             "id": task["id"],
             "title": task["title"],
             "status": task.get("status_title", "Not Started"),
-            "priority": task.get("priority_title", "None"),
             "assigned_to": task.get("assigned_to_fullname", "Unassigned"),
-            "due_date": self._format_date(task.get("due_ts", 0)) or "No due date",
-            "project_id": task.get("project_id"),
-            "url": task.get("url", ""),
-            "comments": task.get("comments_count", 0),
-            "can_edit": task.get("can_edit", False)
+            "due_date": self._format_date(task.get("due_ts", 0)) or None,
+            "priority": task.get("priority_title", "None")
         }
     
-    def _format_project_summary(self, project: Dict) -> Dict:
-        """Format a project with only essential fields for summary display"""
-        return {
-            "id": project["id"],
-            "name": project["project_name"],
-            "group": project.get("group_name", "Ungrouped"),
-            "active": project.get("f_active", True),
-            "tasks_count": project.get("tasks_count", 0),
-            "users_count": len(project.get("users", [])),
-            "url": project.get("url", "")
-        }
-    
-    def _format_user_summary(self, user: Dict) -> Dict:
-        """Format a user with only essential fields for summary display"""
+    def _format_minimal_user(self, user: Dict) -> Dict:
+        """Essential user fields for discovery"""
         return {
             "user_id": user["user_id"],
-            "name": user["full_name"],
-            "email": user.get("email", "")
+            "name": user["full_name"]
         }
     
-    def _create_tasks_summary_text(self, tasks: List[Dict], total_count: int = None, project_name: str = None) -> str:
-        """Create a human-readable summary of tasks optimized for token efficiency"""
-        if not tasks:
-            return "📋 No tasks found"
-        
-        # Group tasks by status and priority
-        by_status = {"Not Started": [], "In Progress": [], "Completed": []}
-        urgent_tasks = []
-        overdue_tasks = []
-        due_soon = []
-        
-        today = datetime.now().date()
-        
-        for task in tasks:
-            status = task.get("status", "Not Started")
-            if status not in by_status:
-                by_status[status] = []
-            by_status[status].append(task)
-            
-            # Check urgency
-            due_date_str = task.get("due_date")
-            if due_date_str and due_date_str != "No due date":
-                try:
-                    due_date = datetime.strptime(due_date_str, "%Y-%m-%d").date()
-                    days_until_due = (due_date - today).days
-                    
-                    if days_until_due < 0:
-                        overdue_tasks.append(task)
-                    elif days_until_due <= 2:
-                        due_soon.append(task)
-                    
-                    if task.get("priority") in ["High", "Critical"]:
-                        urgent_tasks.append(task)
-                except ValueError:
-                    pass
-        
-        # Build summary text
-        lines = []
-        
-        # Header
-        context = f" in {project_name}" if project_name else ""
-        count_text = f" ({len(tasks)}" + (f" of {total_count}" if total_count else "") + ")"
-        lines.append(f"📋 Tasks{context}{count_text}")
-        lines.append("")
-        
-        # Critical items first
-        if overdue_tasks:
-            lines.append("🚨 OVERDUE:")
-            for task in overdue_tasks[:3]:
-                lines.append(f"  • {task['title']} → {task['assigned_to']} (due {task['due_date']})")
-            if len(overdue_tasks) > 3:
-                lines.append(f"  ... and {len(overdue_tasks) - 3} more overdue")
-            lines.append("")
-        
-        if due_soon:
-            lines.append("⏰ DUE SOON:")
-            for task in due_soon[:3]:
-                lines.append(f"  • {task['title']} → {task['assigned_to']} (due {task['due_date']})")
-            if len(due_soon) > 3:
-                lines.append(f"  ... and {len(due_soon) - 3} more due soon")
-            lines.append("")
-        
-        if urgent_tasks:
-            urgent_not_shown = [t for t in urgent_tasks if t not in overdue_tasks and t not in due_soon]
-            if urgent_not_shown:
-                lines.append("🔥 HIGH PRIORITY:")
-                for task in urgent_not_shown[:3]:
-                    lines.append(f"  • {task['title']} → {task['assigned_to']} ({task['priority']})")
-                if len(urgent_not_shown) > 3:
-                    lines.append(f"  ... and {len(urgent_not_shown) - 3} more high priority")
-                lines.append("")
-        
-        # Status breakdown
-        for status, status_tasks in by_status.items():
-            if status_tasks:
-                emoji = {"Not Started": "📝", "In Progress": "⚡", "Completed": "✅"}.get(status, "📌")
-                lines.append(f"{emoji} {status.upper()} ({len(status_tasks)}):")
-                
-                # Show first few tasks
-                shown = 0
-                for task in status_tasks:
-                    if shown >= 3:
-                        break
-                    if task not in overdue_tasks and task not in due_soon and task not in urgent_tasks:
-                        due_text = f" (due {task['due_date']})" if task['due_date'] != "No due date" else ""
-                        lines.append(f"  • {task['title']} → {task['assigned_to']}{due_text}")
-                        shown += 1
-                
-                if len(status_tasks) > shown:
-                    lines.append(f"  ... and {len(status_tasks) - shown} more")
-                lines.append("")
-        
-        # Quick actions
-        lines.append("💡 QUICK ACTIONS:")
-        lines.append("  • get_task_details(task_id) - See full task details")
-        if project_name:
-            lines.append("  • get_project_tasks(project_id, include_details=true) - See all details")
-        lines.append("  • get_user_tasks(user_id) - See user's tasks")
-        
-        return "\n".join(lines)
-    
-    def _create_projects_summary_text(self, grouped_projects: List[Dict]) -> str:
-        """Create a human-readable summary of projects optimized for token efficiency"""
-        if not grouped_projects:
-            return "📂 No projects found"
-        
-        lines = []
-        total_projects = sum(len(group.get("projects", [])) for group in grouped_projects if "projects" in group)
-        lines.append(f"📂 Projects ({total_projects} total)")
-        lines.append("")
-        
-        for group_data in grouped_projects:
-            if "projects" not in group_data:
-                continue
-                
-            group_name = group_data["group"]
-            projects = group_data["projects"]
-            
-            lines.append(f"📁 {group_name} ({len(projects)} projects):")
-            
-            for project in projects[:5]:  # Limit to 5 per group
-                status = "🟢" if project.get("active") else "🔴"
-                task_info = f" ({project['tasks_count']} tasks)" if project.get('tasks_count') else ""
-                user_info = f" • {project['users_count']} users" if project.get('users_count') else ""
-                lines.append(f"  {status} {project['name']}{task_info}{user_info}")
-            
-            if len(projects) > 5:
-                lines.append(f"  ... and {len(projects) - 5} more projects")
-            lines.append("")
-        
-        lines.append("💡 QUICK ACTIONS:")
-        lines.append("  • get_project_details(project_id) - See project details")
-        lines.append("  • get_project_tasks(project_id) - See project tasks")
-        
-        return "\n".join(lines)
-
     # ====== PROJECT MANAGEMENT ======
     
     async def get_all_projects(self, include_recent: bool = False) -> List[Dict]:
@@ -1238,12 +1097,12 @@ class FreedcampMCP:
             """Get all Freedcamp projects grouped by their group name
             
             🔥 START HERE: This is usually the FIRST tool you should call when working with projects!
-            🔥 TOKEN OPTIMIZED: Returns concise summaries by default for better performance
+            🔥 TOKEN OPTIMIZED: Returns minimal JSON with just ID, name, group for discovery
             Use this to discover available projects and get their IDs for other operations.
             
             Args:
                 include_recent: Include recently visited project IDs (default: False)
-                include_details: Include full project details (default: False - shows summary)
+                include_details: Include full project details (default: False - shows minimal fields)
             """
             try:
                 result = await self.get_all_projects(include_recent)
@@ -1251,9 +1110,19 @@ class FreedcampMCP:
                 if include_details:
                     return json.dumps(result, indent=2)
                 else:
-                    # Create summary version
-                    summary_text = self._create_projects_summary_text(result)
-                    return summary_text
+                    # Create minimal version for discovery
+                    minimal_groups = []
+                    for group_data in result:
+                        if "projects" in group_data:
+                            minimal_projects = [self._format_minimal_project(p) for p in group_data["projects"]]
+                            minimal_groups.append({
+                                "group": group_data["group"],
+                                "projects": minimal_projects
+                            })
+                        else:
+                            minimal_groups.append(group_data)  # Keep other data like recent_project_ids
+                    
+                    return json.dumps(minimal_groups, indent=2)
                     
             except Exception as e:
                 logger.error(f"Error getting projects: {e}")
@@ -1375,7 +1244,7 @@ class FreedcampMCP:
         
         @self.mcp.tool(name="get_all_tasks")
         async def get_all_tasks_tool(
-            limit: int = 200,
+            limit: int = 50,
             offset: int = 0,
             status_filter: Optional[List[str]] = None,
             assigned_to_ids: Optional[List[str]] = None,
@@ -1389,12 +1258,15 @@ class FreedcampMCP:
             order_by: Optional[str] = None,
             order_direction: str = "asc",
             include_custom_fields: bool = False,
-            include_tags: bool = False
+            include_tags: bool = False,
+            include_details: bool = False
         ) -> str:
             """Get all tasks with advanced filtering and pagination
             
+            🔥 TOKEN OPTIMIZED: Returns minimal JSON with essential task fields for discovery
+            
             Args:
-                limit: Maximum number of tasks to return (default: 200)
+                limit: Maximum number of tasks to return (default: 50, reduced from 200)
                 offset: Offset for pagination (default: 0)
                 status_filter: Filter by status (0=not started, 1=completed, 2=in progress)
                 assigned_to_ids: Filter by assigned user IDs
@@ -1409,6 +1281,7 @@ class FreedcampMCP:
                 order_direction: Order direction (asc, desc)
                 include_custom_fields: Include custom fields data
                 include_tags: Include tags data
+                include_details: Include full task details (default: False - shows minimal fields)
             """
             try:
                 result = await self.get_all_tasks(
@@ -1420,10 +1293,31 @@ class FreedcampMCP:
                     order_by=order_by, order_direction=order_direction,
                     include_custom_fields=include_custom_fields, include_tags=include_tags
                 )
-                return json.dumps(result, indent=2)
+                
+                if include_details:
+                    return json.dumps(result, indent=2)
+                else:
+                    # Create minimal version for discovery
+                    tasks = result.get("tasks", [])
+                    minimal_tasks = [self._format_minimal_task(task) for task in tasks]
+                    total_count = result.get("meta", {}).get("total", len(tasks))
+                    
+                    minimal_result = {
+                        "tasks": minimal_tasks,
+                        "total_tasks": total_count,
+                        "showing": len(tasks),
+                        "pagination": {
+                            "limit": limit,
+                            "offset": offset,
+                            "has_more": offset + limit < total_count
+                        }
+                    }
+                    
+                    return json.dumps(minimal_result, indent=2)
+                    
             except Exception as e:
                 logger.error(f"Error getting all tasks: {e}")
-                return f"Error: {str(e)}"
+                return f"❌ Error: {str(e)}"
         
         @self.mcp.tool(name="get_project_tasks")
         async def get_project_tasks_tool(
@@ -1437,7 +1331,7 @@ class FreedcampMCP:
         ) -> str:
             """Get tasks for a specific project with enhanced filtering
             
-            🔥 TOKEN OPTIMIZED: Returns concise summaries by default for better performance
+            🔥 TOKEN OPTIMIZED: Returns minimal JSON with essential task fields for discovery
             
             Args:
                 project_id: The project ID
@@ -1446,7 +1340,7 @@ class FreedcampMCP:
                 offset: Offset for pagination (default: 0)
                 include_custom_fields: Include custom fields data
                 include_tags: Include tags data
-                include_details: Include full task details (default: False - shows summary)
+                include_details: Include full task details (default: False - shows minimal fields)
             """
             try:
                 result = await self.get_project_tasks(
@@ -1457,29 +1351,24 @@ class FreedcampMCP:
                 if include_details:
                     return json.dumps(result, indent=2)
                 else:
-                    # Get project name for context
-                    project_name = f"Project {project_id}"  # Default
-                    try:
-                        project_details = await self.get_project_details(project_id)
-                        if project_details.get("name"):
-                            project_name = project_details["name"]
-                    except:
-                        pass
-                    
-                    # Create summary version
+                    # Create minimal version for discovery
                     tasks = result.get("tasks", [])
-                    summary_tasks = [self._format_task_summary(task) for task in tasks]
+                    minimal_tasks = [self._format_minimal_task(task) for task in tasks]
                     total_count = result.get("meta", {}).get("total", len(tasks))
                     
-                    summary_text = self._create_tasks_summary_text(summary_tasks, total_count, project_name)
+                    minimal_result = {
+                        "project_id": project_id,
+                        "tasks": minimal_tasks,
+                        "total_tasks": total_count,
+                        "showing": len(tasks),
+                        "pagination": {
+                            "limit": limit,
+                            "offset": offset,
+                            "has_more": offset + limit < total_count
+                        }
+                    }
                     
-                    # Add pagination info
-                    if total_count > limit:
-                        summary_text += f"\n\n📄 Showing {len(tasks)} of {total_count} tasks"
-                        if offset + limit < total_count:
-                            summary_text += f"\n💡 Use get_project_tasks('{project_id}', limit={limit}, offset={offset + limit}) for more"
-                    
-                    return summary_text
+                    return json.dumps(minimal_result, indent=2)
                     
             except Exception as e:
                 logger.error(f"Error getting project tasks: {e}")
@@ -1496,7 +1385,7 @@ class FreedcampMCP:
         ) -> str:
             """Get tasks assigned to a specific user with enhanced filtering
             
-            🔥 TOKEN OPTIMIZED: Returns concise summaries by default for better performance
+            🔥 TOKEN OPTIMIZED: Returns minimal JSON with essential task fields for discovery
             
             Args:
                 user_id: The user ID
@@ -1504,7 +1393,7 @@ class FreedcampMCP:
                 limit: Maximum number of tasks to return (default: 50, reduced from 200)
                 offset: Offset for pagination (default: 0)
                 include_custom_fields: Include custom fields data
-                include_details: Include full task details (default: False - shows summary)
+                include_details: Include full task details (default: False - shows minimal fields)
             """
             try:
                 result = await self.get_user_tasks(
@@ -1515,42 +1404,39 @@ class FreedcampMCP:
                 if include_details:
                     return json.dumps(result, indent=2)
                 else:
-                    # Get user name for context
-                    user_name = f"User {user_id}"  # Default
-                    try:
-                        user_details = await self.get_user_details(user_id)
-                        if user_details.get("full_name"):
-                            user_name = user_details["full_name"]
-                    except:
-                        pass
-                    
-                    # Create summary version
+                    # Create minimal version for discovery
                     tasks = result.get("tasks", [])
-                    summary_tasks = [self._format_task_summary(task) for task in tasks]
+                    minimal_tasks = [self._format_minimal_task(task) for task in tasks]
                     total_count = result.get("meta", {}).get("total", len(tasks))
                     
-                    summary_text = self._create_tasks_summary_text(summary_tasks, total_count, f"{user_name}'s workspace")
+                    minimal_result = {
+                        "user_id": user_id,
+                        "tasks": minimal_tasks,
+                        "total_tasks": total_count,
+                        "showing": len(tasks),
+                        "pagination": {
+                            "limit": limit,
+                            "offset": offset,
+                            "has_more": offset + limit < total_count
+                        }
+                    }
                     
-                    # Add pagination info
-                    if total_count > limit:
-                        summary_text += f"\n\n📄 Showing {len(tasks)} of {total_count} tasks"
-                        if offset + limit < total_count:
-                            summary_text += f"\n💡 Use get_user_tasks('{user_id}', limit={limit}, offset={offset + limit}) for more"
-                    
-                    return summary_text
+                    return json.dumps(minimal_result, indent=2)
                     
             except Exception as e:
                 logger.error(f"Error getting user tasks: {e}")
                 return f"❌ Error: {str(e)}"
         
         @self.mcp.tool(name="get_task_details")
-        async def get_task_details_tool(task_id: str, include_custom_fields: bool = True, include_details: bool = True) -> str:
+        async def get_task_details_tool(task_id: str, include_custom_fields: bool = True, include_details: bool = False) -> str:
             """Get detailed information about a task including comments and files
+            
+            🔥 TOKEN OPTIMIZED: Returns minimal JSON by default, full details when requested
             
             Args:
                 task_id: The task ID
                 include_custom_fields: Include custom fields data (default: True)
-                include_details: Include full task details (default: True for this tool)
+                include_details: Include full task details (default: False - shows minimal fields)
             """
             try:
                 result = await self.get_task_details(task_id, include_custom_fields)
@@ -1558,28 +1444,17 @@ class FreedcampMCP:
                 if include_details:
                     return json.dumps(result, indent=2)
                 else:
-                    # Create summary version for single task
+                    # Create minimal version for single task
                     if not result:
-                        return f"❌ Task {task_id} not found"
+                        return json.dumps({"error": f"Task {task_id} not found"}, indent=2)
                     
-                    summary_task = self._format_task_summary(result)
+                    minimal_task = self._format_minimal_task(result)
+                    # Add a few extra fields for single task view
+                    minimal_task["url"] = result.get("url", "")
+                    minimal_task["comments_count"] = result.get("comments_count", 0)
+                    minimal_task["can_edit"] = result.get("can_edit", False)
                     
-                    lines = []
-                    lines.append(f"📋 Task: {summary_task['title']}")
-                    lines.append(f"🆔 ID: {summary_task['id']}")
-                    lines.append(f"📊 Status: {summary_task['status']}")
-                    lines.append(f"⚡ Priority: {summary_task['priority']}")
-                    lines.append(f"👤 Assigned: {summary_task['assigned_to']}")
-                    lines.append(f"📅 Due: {summary_task['due_date']}")
-                    if summary_task['comments'] > 0:
-                        lines.append(f"💬 Comments: {summary_task['comments']}")
-                    if summary_task['url']:
-                        lines.append(f"🔗 URL: {summary_task['url']}")
-                    
-                    lines.append("")
-                    lines.append("💡 Use get_task_details(task_id, include_details=true) for full details")
-                    
-                    return "\n".join(lines)
+                    return json.dumps(minimal_task, indent=2)
                     
             except Exception as e:
                 logger.error(f"Error getting task details: {e}")
@@ -1703,11 +1578,11 @@ class FreedcampMCP:
             """Get all users in the Freedcamp workspace
             
             💡 ID LOOKUP: Call this BEFORE assigning tasks to users!
-            🔥 TOKEN OPTIMIZED: Returns concise summaries by default for better performance
+            🔥 TOKEN OPTIMIZED: Returns minimal JSON with essential user fields for discovery
             Use the 'user_id' field from results for task assignments, NOT the 'full_name'.
             
             Args:
-                include_details: Include full user details (default: False - shows summary)
+                include_details: Include full user details (default: False - shows minimal fields)
             """
             try:
                 result = await self.get_all_users()
@@ -1715,26 +1590,18 @@ class FreedcampMCP:
                 if include_details:
                     return json.dumps(result, indent=2)
                 else:
-                    # Create summary version
+                    # Create minimal version for discovery
                     if not result:
-                        return "👥 No users found"
+                        return json.dumps({"users": [], "total_users": 0}, indent=2)
                     
-                    lines = []
-                    lines.append(f"👥 Users ({len(result)} total)")
-                    lines.append("")
+                    minimal_users = [self._format_minimal_user(user) for user in result]
                     
-                    for user in result:
-                        lines.append(f"• {user['full_name']} (ID: {user['user_id']})")
-                        if user.get('email'):
-                            lines.append(f"  📧 {user['email']}")
+                    minimal_result = {
+                        "users": minimal_users,
+                        "total_users": len(result)
+                    }
                     
-                    lines.append("")
-                    lines.append("💡 QUICK ACTIONS:")
-                    lines.append("  • Use user_id field for task assignments")
-                    lines.append("  • get_user_tasks(user_id) - See user's tasks")
-                    lines.append("  • get_users(include_details=true) - See full details")
-                    
-                    return "\n".join(lines)
+                    return json.dumps(minimal_result, indent=2)
                     
             except Exception as e:
                 logger.error(f"Error getting users: {e}")
