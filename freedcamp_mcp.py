@@ -600,6 +600,10 @@ class FreedcampMCP:
         if include_tags:
             params["f_include_tags"] = "1"
         
+        # DEBUG: Try to force include more fields - maybe dates need special parameter
+        params["f_with_dates"] = "1"  # Try this parameter
+        params["f_full"] = "1"  # And this one
+        
         response = await self._make_request("GET", "tasks", params)
         
         tasks = []
