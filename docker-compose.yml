@@ -1,0 +1,66 @@
+services:
+  freedcamp-fastapi:
+    build: .
+    image: freedcamp-fastapi:latest
+    container_name: freedcamp-fastapi
+    environment:
+      - FREEDCAMP_API_KEY=${FREEDCAMP_API_KEY}
+      - FREEDCAMP_API_SECRET=${FREEDCAMP_API_SECRET}
+      # Optional: Add more environment variables as needed
+      - PYTHONUNBUFFERED=1  # Ensures stdout/stderr are unbuffered
+    # For development - mount the source code
+    volumes:
+      - ./freedcamp_mcp.py:/app/freedcamp_mcp.py:ro
+    # Keep stdin open and allocate a pseudo-TTY
+    stdin_open: true
+    tty: true
+    ports:
+      - "8000:8000"
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    # Add restart policy
+    restart: unless-stopped
+    # Minimal resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  mcpo:
+    image: ghcr.io/open-webui/mcpo:main
+    container_name: mcpo
+    depends_on:
+      freedcamp-fastapi:
+        condition: service_healthy
+    command: [
+      "--api-key", "top-secret",
+      "--server-type", "streamable_http",
+      "--", "http://freedcamp-fastapi:8000/mcp"
+    ]
+    ports:
+      - "8111:8000"
+    # Add restart policy for MCPO
+    restart: unless-stopped
+    # Add health check for MCPO - check if process is running
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "mcpo"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - default
+
+# Optional: Network for multiple MCP servers
+networks:
+  default:
+    name: mcp-network

@@ -1,0 +1,24 @@
+[project]
+name = "freedcamp-mcp"
+version = "1.0.0"
+description = "MCP server for Freedcamp API integration"
+authors = [
+    { name = "Your Name", email = "your.email@example.com" }
+]
+requires-python = ">=3.9"
+dependencies = [
+    "mcp>=0.9.0",
+    "httpx>=0.25.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0"
+]
+
+[project.scripts]
+freedcamp-mcp = "freedcamp_mcp:main"
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["freedcamp_mcp"]
