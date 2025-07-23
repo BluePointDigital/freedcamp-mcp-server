@@ -182,32 +182,21 @@ class FreedcampMCP:
     
     def _format_minimal_task(self, task: Dict) -> Dict:
         """Essential task fields for discovery"""
-        # DEBUG: Let's see what date-related fields are actually in the task
-        date_fields = {}
-        for key, value in task.items():
-            if any(date_word in key.lower() for date_word in ['date', 'due', 'ts', 'time']):
-                date_fields[key] = value
+        # Get due_date directly - it's already formatted as YYYY-MM-DD or null
+        due_date = task.get("due_date")
         
-        # Handle due date properly - check multiple possible field names
-        due_ts = task.get("due_ts") or task.get("due_date") or task.get("duedate")
-        due_date = None
+        # Ensure empty strings become null for consistency
+        if due_date == "" or due_date == "0000-00-00":
+            due_date = None
         
-        if due_ts and str(due_ts).strip() and due_ts != "0":
-            formatted_date = self._format_date(due_ts)
-            due_date = formatted_date if formatted_date else None
-        
-        result = {
+        return {
             "id": task["id"],
             "title": task["title"],
             "status": task.get("status_title", "Not Started"),
             "assigned_to": task.get("assigned_to_fullname", "Unassigned"),
             "due_date": due_date,
-            "priority": task.get("priority_title", "None"),
-            "_debug_date_fields": date_fields,  # Temporary debug info
-            "_debug_due_ts_raw": task.get("due_ts"),  # Show raw value
+            "priority": task.get("priority_title", "None")
         }
-        
-        return result
     
     def _format_minimal_user(self, user: Dict) -> Dict:
         """Essential user fields for discovery"""
@@ -436,8 +425,8 @@ class FreedcampMCP:
             "task_group_id": task.get("task_group_id"),
             "task_group_name": task.get("task_group_name"),
             "created_at": self._format_timestamp(task.get("created_ts", 0)),
-            "due_date": self._format_date(task.get("due_ts")) if task.get("due_ts") and task.get("due_ts") != "0" else None,
-            "start_date": self._format_date(task.get("start_ts")) if task.get("start_ts") and task.get("start_ts") != "0" else None,
+            "due_date": task.get("due_date") if task.get("due_date") and task.get("due_date") not in ["", "0000-00-00"] else None,
+            "start_date": task.get("start_date") if task.get("start_date") and task.get("start_date") not in ["", "0000-00-00"] else None,
             "completed_at": self._format_timestamp(task.get("completed_ts", 0)) if task.get("completed_ts") else None,
             "comments_count": task.get("comments_count", 0),
             "files_count": task.get("files_count", 0),
