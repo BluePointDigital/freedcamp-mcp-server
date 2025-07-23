@@ -182,21 +182,32 @@ class FreedcampMCP:
     
     def _format_minimal_task(self, task: Dict) -> Dict:
         """Essential task fields for discovery"""
-        # Handle due date properly - only format if there's a valid timestamp
-        due_ts = task.get("due_ts")
+        # DEBUG: Let's see what date-related fields are actually in the task
+        date_fields = {}
+        for key, value in task.items():
+            if any(date_word in key.lower() for date_word in ['date', 'due', 'ts', 'time']):
+                date_fields[key] = value
+        
+        # Handle due date properly - check multiple possible field names
+        due_ts = task.get("due_ts") or task.get("due_date") or task.get("duedate")
         due_date = None
+        
         if due_ts and str(due_ts).strip() and due_ts != "0":
             formatted_date = self._format_date(due_ts)
             due_date = formatted_date if formatted_date else None
         
-        return {
+        result = {
             "id": task["id"],
             "title": task["title"],
             "status": task.get("status_title", "Not Started"),
             "assigned_to": task.get("assigned_to_fullname", "Unassigned"),
             "due_date": due_date,
-            "priority": task.get("priority_title", "None")
+            "priority": task.get("priority_title", "None"),
+            "_debug_date_fields": date_fields,  # Temporary debug info
+            "_debug_due_ts_raw": task.get("due_ts"),  # Show raw value
         }
+        
+        return result
     
     def _format_minimal_user(self, user: Dict) -> Dict:
         """Essential user fields for discovery"""
