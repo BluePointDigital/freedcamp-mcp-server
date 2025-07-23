@@ -145,13 +145,26 @@ class FreedcampMCP:
     
     def _format_date(self, ts: Union[int, str]) -> str:
         """Convert Unix timestamp to date format"""
-        if ts:
-            try:
-                timestamp = int(ts) if isinstance(ts, str) else ts
-                return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d")
-            except (ValueError, TypeError):
+        if not ts or ts == 0 or ts == "0":
+            return ""
+        
+        try:
+            # Handle string timestamps
+            if isinstance(ts, str):
+                ts = ts.strip()
+                if not ts or ts == "0":
+                    return ""
+                timestamp = int(ts)
+            else:
+                timestamp = int(ts)
+            
+            # Validate reasonable timestamp range (not too far in past/future)
+            if timestamp <= 0:
                 return ""
-        return ""
+                
+            return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d")
+        except (ValueError, TypeError, OSError):
+            return ""
 
     # ====== SUMMARY FORMATTING METHODS ======
     
@@ -169,12 +182,19 @@ class FreedcampMCP:
     
     def _format_minimal_task(self, task: Dict) -> Dict:
         """Essential task fields for discovery"""
+        # Handle due date properly - only format if there's a valid timestamp
+        due_ts = task.get("due_ts")
+        due_date = None
+        if due_ts and str(due_ts).strip() and due_ts != "0":
+            formatted_date = self._format_date(due_ts)
+            due_date = formatted_date if formatted_date else None
+        
         return {
             "id": task["id"],
             "title": task["title"],
             "status": task.get("status_title", "Not Started"),
             "assigned_to": task.get("assigned_to_fullname", "Unassigned"),
-            "due_date": self._format_date(task.get("due_ts", 0)) or None,
+            "due_date": due_date,
             "priority": task.get("priority_title", "None")
         }
     
@@ -405,8 +425,8 @@ class FreedcampMCP:
             "task_group_id": task.get("task_group_id"),
             "task_group_name": task.get("task_group_name"),
             "created_at": self._format_timestamp(task.get("created_ts", 0)),
-            "due_date": self._format_date(task.get("due_ts", 0)),
-            "start_date": self._format_date(task.get("start_ts", 0)),
+            "due_date": self._format_date(task.get("due_ts")) if task.get("due_ts") and task.get("due_ts") != "0" else None,
+            "start_date": self._format_date(task.get("start_ts")) if task.get("start_ts") and task.get("start_ts") != "0" else None,
             "completed_at": self._format_timestamp(task.get("completed_ts", 0)) if task.get("completed_ts") else None,
             "comments_count": task.get("comments_count", 0),
             "files_count": task.get("files_count", 0),
