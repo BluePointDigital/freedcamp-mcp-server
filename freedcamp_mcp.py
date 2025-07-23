@@ -182,14 +182,13 @@ class FreedcampMCP:
     
     def _format_minimal_task(self, task: Dict) -> Dict:
         """Essential task fields for discovery"""
-        # DEBUG: Let's see what's actually in the task object
-        due_date_raw = task.get("due_date")
-        
-        # Get due_date directly - it's already formatted as YYYY-MM-DD or null
+        # The API returns due_date already formatted as YYYY-MM-DD string
         due_date = task.get("due_date")
         
-        # Ensure empty strings become null for consistency
-        if due_date == "" or due_date == "0000-00-00":
+        # Clean up the due_date - use as-is if it's a valid date string, otherwise null
+        if due_date and str(due_date).strip() and due_date != "0000-00-00":
+            due_date = str(due_date).strip()
+        else:
             due_date = None
         
         return {
@@ -198,9 +197,7 @@ class FreedcampMCP:
             "status": task.get("status_title", "Not Started"),
             "assigned_to": task.get("assigned_to_fullname", "Unassigned"),
             "due_date": due_date,
-            "priority": task.get("priority_title", "None"),
-            "_debug_raw_due_date": due_date_raw,  # Show what we actually got
-            "_debug_all_keys": list(task.keys())[:10]  # Show first 10 keys in task object
+            "priority": task.get("priority_title", "None")
         }
     
     def _format_minimal_user(self, user: Dict) -> Dict:
@@ -430,8 +427,8 @@ class FreedcampMCP:
             "task_group_id": task.get("task_group_id"),
             "task_group_name": task.get("task_group_name"),
             "created_at": self._format_timestamp(task.get("created_ts", 0)),
-            "due_date": task.get("due_date") if task.get("due_date") and task.get("due_date") not in ["", "0000-00-00"] else None,
-            "start_date": task.get("start_date") if task.get("start_date") and task.get("start_date") not in ["", "0000-00-00"] else None,
+            "due_date": task.get("due_date") if task.get("due_date") and task.get("due_date") != "0000-00-00" else None,
+            "start_date": task.get("start_date") if task.get("start_date") and task.get("start_date") != "0000-00-00" else None,
             "completed_at": self._format_timestamp(task.get("completed_ts", 0)) if task.get("completed_ts") else None,
             "comments_count": task.get("comments_count", 0),
             "files_count": task.get("files_count", 0),
@@ -599,10 +596,6 @@ class FreedcampMCP:
             params["f_cf"] = "1"
         if include_tags:
             params["f_include_tags"] = "1"
-        
-        # DEBUG: Try to force include more fields - maybe dates need special parameter
-        params["f_with_dates"] = "1"  # Try this parameter
-        params["f_full"] = "1"  # And this one
         
         response = await self._make_request("GET", "tasks", params)
         
