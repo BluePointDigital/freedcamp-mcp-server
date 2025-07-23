@@ -41,7 +41,7 @@ class FreedcampMCP:
         # Create FastMCP server
         self.mcp = FastMCP(
             name="freedcamp-mcp",
-            description="""
+            instructions="""
             Freedcamp Project Management MCP Server
             
             IMPORTANT WORKFLOW INSTRUCTIONS:
