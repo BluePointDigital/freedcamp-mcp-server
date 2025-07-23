@@ -1285,11 +1285,12 @@ class FreedcampMCP:
             order_direction: str = "asc",
             include_custom_fields: bool = False,
             include_tags: bool = False,
-            include_details: bool = False
+            include_details: bool = True
         ) -> str:
             """Get all tasks with advanced filtering and pagination
             
-            🔥 TOKEN OPTIMIZED: Returns minimal JSON with essential task fields for discovery
+            🔥 TOKEN OPTIMIZED: Returns full task details by default (includes due dates)
+            Set include_details=False for minimal view if you only need basic info
             
             Args:
                 limit: Maximum number of tasks to return (default: 50, reduced from 200)
@@ -1307,7 +1308,7 @@ class FreedcampMCP:
                 order_direction: Order direction (asc, desc)
                 include_custom_fields: Include custom fields data
                 include_tags: Include tags data
-                include_details: Include full task details (default: False - shows minimal fields)
+                include_details: Include full task details (default: True - shows all fields including dates)
             """
             try:
                 result = await self.get_all_tasks(
@@ -1353,11 +1354,12 @@ class FreedcampMCP:
             offset: int = 0,
             include_custom_fields: bool = False,
             include_tags: bool = False,
-            include_details: bool = False
+            include_details: bool = True
         ) -> str:
             """Get tasks for a specific project with enhanced filtering
             
-            🔥 TOKEN OPTIMIZED: Returns minimal JSON with essential task fields for discovery
+            🔥 TOKEN OPTIMIZED: Returns full task details by default (includes due dates)
+            Set include_details=False for minimal view if you only need basic info
             
             Args:
                 project_id: The project ID
@@ -1366,7 +1368,7 @@ class FreedcampMCP:
                 offset: Offset for pagination (default: 0)
                 include_custom_fields: Include custom fields data
                 include_tags: Include tags data
-                include_details: Include full task details (default: False - shows minimal fields)
+                include_details: Include full task details (default: True - shows all fields including dates)
             """
             try:
                 result = await self.get_project_tasks(
@@ -1407,11 +1409,12 @@ class FreedcampMCP:
             limit: int = 50,
             offset: int = 0,
             include_custom_fields: bool = False,
-            include_details: bool = False
+            include_details: bool = True
         ) -> str:
             """Get tasks assigned to a specific user with enhanced filtering
             
-            🔥 TOKEN OPTIMIZED: Returns minimal JSON with essential task fields for discovery
+            🔥 TOKEN OPTIMIZED: Returns full task details by default (includes due dates)
+            Set include_details=False for minimal view if you only need basic info
             
             Args:
                 user_id: The user ID
@@ -1419,7 +1422,7 @@ class FreedcampMCP:
                 limit: Maximum number of tasks to return (default: 50, reduced from 200)
                 offset: Offset for pagination (default: 0)
                 include_custom_fields: Include custom fields data
-                include_details: Include full task details (default: False - shows minimal fields)
+                include_details: Include full task details (default: True - shows all fields including dates)
             """
             try:
                 result = await self.get_user_tasks(
@@ -1454,15 +1457,16 @@ class FreedcampMCP:
                 return f"❌ Error: {str(e)}"
         
         @self.mcp.tool(name="get_task_details")
-        async def get_task_details_tool(task_id: str, include_custom_fields: bool = True, include_details: bool = False) -> str:
+        async def get_task_details_tool(task_id: str, include_custom_fields: bool = True, include_details: bool = True) -> str:
             """Get detailed information about a task including comments and files
             
-            🔥 TOKEN OPTIMIZED: Returns minimal JSON by default, full details when requested
+            🔥 TOKEN OPTIMIZED: Returns full task details by default (includes all fields)
+            Set include_details=False for minimal view if you only need basic info
             
             Args:
                 task_id: The task ID
                 include_custom_fields: Include custom fields data (default: True)
-                include_details: Include full task details (default: False - shows minimal fields)
+                include_details: Include full task details (default: True - shows all fields including dates)
             """
             try:
                 result = await self.get_task_details(task_id, include_custom_fields)
