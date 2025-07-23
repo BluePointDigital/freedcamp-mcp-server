@@ -39,7 +39,43 @@ class FreedcampMCP:
         self.client = httpx.AsyncClient()
         
         # Create FastMCP server
-        self.mcp = FastMCP("freedcamp-mcp")
+        self.mcp = FastMCP(
+            name="freedcamp-mcp",
+            description="""
+            Freedcamp Project Management MCP Server
+            
+            IMPORTANT WORKFLOW INSTRUCTIONS:
+            
+            1. ALWAYS start by getting project context:
+               - Use get_projects() to see available projects
+               - Use get_project_details(project_id) for specific project info
+               - Never assume project IDs - always look them up first
+            
+            2. For task operations, follow this sequence:
+               - Get projects first to identify correct project_id
+               - Use get_project_tasks(project_id) to see existing tasks
+               - Use get_users() to find correct user IDs for assignments
+               - Then create/update tasks with proper IDs
+            
+            3. When creating tasks:
+               - ALWAYS specify project_id (required)
+               - Look up user IDs before assigning tasks
+               - Use proper date format: YYYY-MM-DD
+               - Check project permissions before creating
+            
+            4. For user management:
+               - Use get_users() to find user IDs before task assignment
+               - Use get_current_user() to understand current user context
+               - User IDs are required for task assignments, not names
+            
+            5. Error handling:
+               - If you get a "project not found" error, use get_projects() first
+               - If user assignment fails, verify user ID with get_users()
+               - Always validate IDs exist before using them in operations
+            
+            Remember: This system requires explicit ID lookups - never guess or assume IDs exist.
+            """
+        )
         self._setup_tools()
     
     def _generate_auth(self) -> Dict[str, str]:
