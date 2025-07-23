@@ -182,6 +182,9 @@ class FreedcampMCP:
     
     def _format_minimal_task(self, task: Dict) -> Dict:
         """Essential task fields for discovery"""
+        # DEBUG: Let's see what's actually in the task object
+        due_date_raw = task.get("due_date")
+        
         # Get due_date directly - it's already formatted as YYYY-MM-DD or null
         due_date = task.get("due_date")
         
@@ -195,7 +198,9 @@ class FreedcampMCP:
             "status": task.get("status_title", "Not Started"),
             "assigned_to": task.get("assigned_to_fullname", "Unassigned"),
             "due_date": due_date,
-            "priority": task.get("priority_title", "None")
+            "priority": task.get("priority_title", "None"),
+            "_debug_raw_due_date": due_date_raw,  # Show what we actually got
+            "_debug_all_keys": list(task.keys())[:10]  # Show first 10 keys in task object
         }
     
     def _format_minimal_user(self, user: Dict) -> Dict:
