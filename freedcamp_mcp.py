@@ -182,12 +182,8 @@ class FreedcampMCP:
     
     def _format_minimal_task(self, task: Dict) -> Dict:
         """Essential task fields for browsing/listing - optimized for token efficiency"""
-        # Clean up the due_date - use as-is if it's a valid date string, otherwise null
-        due_date = task.get("due_date")
-        if due_date and str(due_date).strip() and due_date != "0000-00-00":
-            due_date = str(due_date).strip()
-        else:
-            due_date = None
+        # Convert due_ts (timestamp) to readable date format
+        due_date = self._format_date(task.get("due_ts", 0)) or None
         
         return {
             "id": task["id"],
@@ -428,8 +424,8 @@ class FreedcampMCP:
             "task_group_id": task.get("task_group_id"),
             "task_group_name": task.get("task_group_name"),
             "created_at": self._format_timestamp(task.get("created_ts", 0)),
-            "due_date": task.get("due_date") if task.get("due_date") and task.get("due_date") != "0000-00-00" else None,
-            "start_date": task.get("start_date") if task.get("start_date") and task.get("start_date") != "0000-00-00" else None,
+            "due_date": self._format_date(task.get("due_ts", 0)) or None,
+            "start_date": self._format_date(task.get("start_ts", 0)) or None,
             "completed_at": self._format_timestamp(task.get("completed_ts", 0)) if task.get("completed_ts") else None,
             "comments_count": task.get("comments_count", 0),
             "files_count": task.get("files_count", 0),
