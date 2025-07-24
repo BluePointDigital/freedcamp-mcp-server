@@ -41,40 +41,7 @@ class FreedcampMCP:
         # Create FastMCP server
         self.mcp = FastMCP(
             name="freedcamp-mcp",
-            instructions="""
-            Freedcamp Project Management MCP Server
-            
-            IMPORTANT WORKFLOW INSTRUCTIONS:
-            
-            1. ALWAYS start by getting project context:
-               - Use get_projects() to see available projects
-               - Use get_project_details(project_id) for specific project info
-               - Never assume project IDs - always look them up first
-            
-            2. For task operations, follow this sequence:
-               - Get projects first to identify correct project_id
-               - Use get_project_tasks(project_id) to see existing tasks
-               - Use get_users() to find correct user IDs for assignments
-               - Then create/update tasks with proper IDs
-            
-            3. When creating tasks:
-               - ALWAYS specify project_id (required)
-               - Look up user IDs before assigning tasks
-               - Use proper date format: YYYY-MM-DD
-               - Check project permissions before creating
-            
-            4. For user management:
-               - Use get_users() to find user IDs before task assignment
-               - Use get_current_user() to understand current user context
-               - User IDs are required for task assignments, not names
-            
-            5. Error handling:
-               - If you get a "project not found" error, use get_projects() first
-               - If user assignment fails, verify user ID with get_users()
-               - Always validate IDs exist before using them in operations
-            
-            Remember: This system requires explicit ID lookups - never guess or assume IDs exist.
-            """
+            instructions="Freedcamp API server. Always use get_projects() and get_users() first to lookup IDs before other operations."
         )
         self._setup_tools()
     
@@ -1004,129 +971,13 @@ class FreedcampMCP:
     def _setup_tools(self):
         """Setup FastMCP tools using decorators"""
         
-        # ====== WORKFLOW GUIDANCE TOOL ======
-        
-        @self.mcp.tool
-        async def get_workflow_help(task_type: str = "general") -> str:
-            """Get workflow instructions and best practices for using this Freedcamp MCP server
-            
-            Args:
-                task_type: Type of task you want help with (general, create_task, assign_users, project_setup)
-            """
-            workflows = {
-                "general": """
-                GENERAL WORKFLOW FOR FREEDCAMP MCP SERVER:
-                
-                1. DISCOVERY PHASE (Always start here):
-                   → get_projects() - See all available projects
-                   → get_users() - See all available users
-                   → get_current_user() - Understand current user context
-                
-                2. PROJECT SELECTION:
-                   → Use project names from get_projects() to identify target project
-                   → get_project_details(project_id) for detailed project info
-                   → NEVER assume project IDs - always look them up
-                
-                3. TASK OPERATIONS:
-                   → get_project_tasks(project_id) to see existing tasks
-                   → get_user_tasks(user_id) to see user workload
-                   → create_task() with proper project_id and user IDs
-                
-                4. ID MANAGEMENT:
-                   → Project IDs: from get_projects()
-                   → User IDs: from get_users() (use user_id field, not names)
-                   → Task IDs: from get_project_tasks() or task creation response
-                
-                CRITICAL: Always look up IDs before using them!
-                """,
-                
-                "create_task": """
-                TASK CREATION WORKFLOW:
-                
-                1. PREREQUISITES:
-                   → get_projects() - Find target project
-                   → get_project_details(project_id) - Verify permissions
-                   → get_users() - Find assignee user IDs
-                
-                2. TASK CREATION:
-                   → create_task(title, project_id, ...)
-                   → REQUIRED: title, project_id
-                   → OPTIONAL: description, assigned_to_id, due_date, priority
-                
-                3. VALIDATION:
-                   → get_task_details(task_id) to confirm creation
-                   → Check task appears in get_project_tasks(project_id)
-                
-                EXAMPLE SEQUENCE:
-                1. projects = get_projects()
-                2. users = get_users()  
-                3. create_task(title="New Task", project_id="123", assigned_to_id="456")
-                """,
-                
-                "assign_users": """
-                USER ASSIGNMENT WORKFLOW:
-                
-                1. GET USER INFORMATION:
-                   → get_users() - Get all available users
-                   → Note: Use 'user_id' field for assignments, NOT 'full_name'
-                
-                2. FIND TARGET USER:
-                   → Search by full_name or email in get_users() response
-                   → Extract the corresponding user_id
-                
-                3. ASSIGNMENT OPTIONS:
-                   → assigned_to_id: specific user ID
-                   → assigned_to_id: "0" (unassigned)
-                   → assigned_to_id: "-1" (assigned to everyone)
-                
-                4. VERIFY ASSIGNMENT:
-                   → get_user_tasks(user_id) to see user's tasks
-                   → get_task_details(task_id) to confirm assignment
-                
-                CRITICAL: Never use user names directly - always convert to user_id first!
-                """,
-                
-                "project_setup": """
-                PROJECT SETUP WORKFLOW:
-                
-                1. DISCOVERY:
-                   → get_projects() - See existing projects and groups
-                   → get_current_user() - Understand your permissions
-                
-                2. PROJECT CREATION:
-                   → create_project(name, description, ...)
-                   → Consider: group_name, color, users_to_add
-                
-                3. TEAM SETUP:
-                   → get_users() - Find team members
-                   → update_project(project_id, users_to_add=[...])
-                
-                4. TASK STRUCTURE:
-                   → get_project_details(project_id) - Confirm setup
-                   → create_task() - Add initial tasks
-                
-                5. VERIFICATION:
-                   → get_project_tasks(project_id) - Verify task creation
-                   → get_project_details(project_id) - Check team membership
-                """
-            }
-            
-            return workflows.get(task_type, workflows["general"])
+
         
         # ====== PROJECT TOOLS ======
         
         @self.mcp.tool
         async def get_projects(include_recent: bool = False, include_details: bool = False) -> str:
-            """Get all Freedcamp projects grouped by their group name
-            
-            🔥 START HERE: This is usually the FIRST tool you should call when working with projects!
-            🔥 TOKEN OPTIMIZED: Returns minimal JSON with just ID, name, group for discovery
-            Use this to discover available projects and get their IDs for other operations.
-            
-            Args:
-                include_recent: Include recently visited project IDs (default: False)
-                include_details: Include full project details (default: False - shows minimal fields)
-            """
+            """Get projects grouped by name. Use include_details=True for full data."""
             try:
                 result = await self.get_all_projects(include_recent)
                 
@@ -1284,30 +1135,7 @@ class FreedcampMCP:
             include_tags: bool = False,
             include_details: bool = False
         ) -> str:
-            """Get all tasks with advanced filtering and pagination
-            
-            🔥 TOKEN OPTIMIZED: Returns essential task fields by default for efficient browsing
-            Includes: id, title, status, priority, assignee, due_date, project_id, task_group, url
-            Use include_details=True to get full task details (descriptions, permissions, etc.)
-            
-            Args:
-                limit: Maximum number of tasks to return (default: 50, reduced from 200)
-                offset: Offset for pagination (default: 0)
-                status_filter: Filter by status (0=not started, 1=completed, 2=in progress)
-                assigned_to_ids: Filter by assigned user IDs
-                created_by_ids: Filter by creator user IDs
-                due_date_from: Filter by due date from (YYYY-MM-DD)
-                due_date_to: Filter by due date to (YYYY-MM-DD)
-                created_date_from: Filter by creation date from (YYYY-MM-DD)
-                created_date_to: Filter by creation date to (YYYY-MM-DD)
-                include_archived: Include archived projects (default: False)
-                lists_status: Task list status (active, archived, all)
-                order_by: Order by field (priority, due_date)
-                order_direction: Order direction (asc, desc)
-                include_custom_fields: Include custom fields data
-                include_tags: Include tags data
-                include_details: Include full task details (default: False - shows essential fields)
-            """
+            """Get tasks with filtering. Essential fields by default, use include_details=True for full data."""
             try:
                 result = await self.get_all_tasks(
                     limit=limit, offset=offset, status_filter=status_filter,
@@ -1354,21 +1182,7 @@ class FreedcampMCP:
             include_tags: bool = False,
             include_details: bool = False
         ) -> str:
-            """Get tasks for a specific project with enhanced filtering
-            
-            🔥 TOKEN OPTIMIZED: Returns essential task fields by default for efficient browsing
-            Includes: id, title, status, priority, assignee, due_date, project_id, task_group, url
-            Use include_details=True to get full task details (descriptions, permissions, etc.)
-            
-            Args:
-                project_id: The project ID
-                status: Filter by status (incomplete, complete, in_progress)
-                limit: Maximum number of tasks to return (default: 50, reduced from 200)
-                offset: Offset for pagination (default: 0)
-                include_custom_fields: Include custom fields data
-                include_tags: Include tags data
-                include_details: Include full task details (default: False - shows essential fields)
-            """
+            """Get project tasks. Essential fields by default, use include_details=True for full data."""
             try:
                 result = await self.get_project_tasks(
                     project_id=project_id, status=status, limit=limit, offset=offset,
@@ -1410,20 +1224,7 @@ class FreedcampMCP:
             include_custom_fields: bool = False,
             include_details: bool = False
         ) -> str:
-            """Get tasks assigned to a specific user with enhanced filtering
-            
-            🔥 TOKEN OPTIMIZED: Returns essential task fields by default for efficient browsing
-            Includes: id, title, status, priority, assignee, due_date, project_id, task_group, url
-            Use include_details=True to get full task details (descriptions, permissions, etc.)
-            
-            Args:
-                user_id: The user ID
-                include_completed: Include completed tasks (default: False)
-                limit: Maximum number of tasks to return (default: 50, reduced from 200)
-                offset: Offset for pagination (default: 0)
-                include_custom_fields: Include custom fields data
-                include_details: Include full task details (default: False - shows essential fields)
-            """
+            """Get user tasks. Essential fields by default, use include_details=True for full data."""
             try:
                 result = await self.get_user_tasks(
                     user_id=user_id, include_completed=include_completed,
@@ -1605,15 +1406,7 @@ class FreedcampMCP:
         
         @self.mcp.tool
         async def get_users(include_details: bool = False) -> str:
-            """Get all users in the Freedcamp workspace
-            
-            💡 ID LOOKUP: Call this BEFORE assigning tasks to users!
-            🔥 TOKEN OPTIMIZED: Returns minimal JSON with essential user fields for discovery
-            Use the 'user_id' field from results for task assignments, NOT the 'full_name'.
-            
-            Args:
-                include_details: Include full user details (default: False - shows minimal fields)
-            """
+            """Get users. Use user_id field for assignments. Use include_details=True for full data."""
             try:
                 result = await self.get_all_users()
                 
