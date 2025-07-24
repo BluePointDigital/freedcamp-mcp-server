@@ -181,11 +181,9 @@ class FreedcampMCP:
         }
     
     def _format_minimal_task(self, task: Dict) -> Dict:
-        """Essential task fields for discovery"""
-        # The API returns due_date already formatted as YYYY-MM-DD string
-        due_date = task.get("due_date")
-        
+        """Essential task fields for browsing/listing - optimized for token efficiency"""
         # Clean up the due_date - use as-is if it's a valid date string, otherwise null
+        due_date = task.get("due_date")
         if due_date and str(due_date).strip() and due_date != "0000-00-00":
             due_date = str(due_date).strip()
         else:
@@ -194,10 +192,13 @@ class FreedcampMCP:
         return {
             "id": task["id"],
             "title": task["title"],
-            "status": task.get("status_title", "Not Started"),
-            "assigned_to": task.get("assigned_to_fullname", "Unassigned"),
+            "status_title": task.get("status_title", "Not Started"),
+            "priority_title": task.get("priority_title", "None"),
+            "assigned_to_fullname": task.get("assigned_to_fullname", "Unassigned"),
             "due_date": due_date,
-            "priority": task.get("priority_title", "None")
+            "project_id": task.get("project_id"),
+            "task_group_name": task.get("task_group_name"),
+            "url": task.get("url", "")
         }
     
     def _format_minimal_user(self, user: Dict) -> Dict:
@@ -1285,12 +1286,13 @@ class FreedcampMCP:
             order_direction: str = "asc",
             include_custom_fields: bool = False,
             include_tags: bool = False,
-            include_details: bool = True
+            include_details: bool = False
         ) -> str:
             """Get all tasks with advanced filtering and pagination
             
-            🔥 TOKEN OPTIMIZED: Returns full task details by default (includes due dates)
-            Set include_details=False for minimal view if you only need basic info
+            🔥 TOKEN OPTIMIZED: Returns essential task fields by default for efficient browsing
+            Includes: id, title, status, priority, assignee, due_date, project_id, task_group, url
+            Use include_details=True to get full task details (descriptions, permissions, etc.)
             
             Args:
                 limit: Maximum number of tasks to return (default: 50, reduced from 200)
@@ -1308,7 +1310,7 @@ class FreedcampMCP:
                 order_direction: Order direction (asc, desc)
                 include_custom_fields: Include custom fields data
                 include_tags: Include tags data
-                include_details: Include full task details (default: True - shows all fields including dates)
+                include_details: Include full task details (default: False - shows essential fields)
             """
             try:
                 result = await self.get_all_tasks(
@@ -1354,12 +1356,13 @@ class FreedcampMCP:
             offset: int = 0,
             include_custom_fields: bool = False,
             include_tags: bool = False,
-            include_details: bool = True
+            include_details: bool = False
         ) -> str:
             """Get tasks for a specific project with enhanced filtering
             
-            🔥 TOKEN OPTIMIZED: Returns full task details by default (includes due dates)
-            Set include_details=False for minimal view if you only need basic info
+            🔥 TOKEN OPTIMIZED: Returns essential task fields by default for efficient browsing
+            Includes: id, title, status, priority, assignee, due_date, project_id, task_group, url
+            Use include_details=True to get full task details (descriptions, permissions, etc.)
             
             Args:
                 project_id: The project ID
@@ -1368,7 +1371,7 @@ class FreedcampMCP:
                 offset: Offset for pagination (default: 0)
                 include_custom_fields: Include custom fields data
                 include_tags: Include tags data
-                include_details: Include full task details (default: True - shows all fields including dates)
+                include_details: Include full task details (default: False - shows essential fields)
             """
             try:
                 result = await self.get_project_tasks(
@@ -1409,12 +1412,13 @@ class FreedcampMCP:
             limit: int = 50,
             offset: int = 0,
             include_custom_fields: bool = False,
-            include_details: bool = True
+            include_details: bool = False
         ) -> str:
             """Get tasks assigned to a specific user with enhanced filtering
             
-            🔥 TOKEN OPTIMIZED: Returns full task details by default (includes due dates)
-            Set include_details=False for minimal view if you only need basic info
+            🔥 TOKEN OPTIMIZED: Returns essential task fields by default for efficient browsing
+            Includes: id, title, status, priority, assignee, due_date, project_id, task_group, url
+            Use include_details=True to get full task details (descriptions, permissions, etc.)
             
             Args:
                 user_id: The user ID
@@ -1422,7 +1426,7 @@ class FreedcampMCP:
                 limit: Maximum number of tasks to return (default: 50, reduced from 200)
                 offset: Offset for pagination (default: 0)
                 include_custom_fields: Include custom fields data
-                include_details: Include full task details (default: True - shows all fields including dates)
+                include_details: Include full task details (default: False - shows essential fields)
             """
             try:
                 result = await self.get_user_tasks(
