@@ -41,7 +41,7 @@ class FreedcampMCP:
         # Create FastMCP server
         self.mcp = FastMCP(
             name="freedcamp-mcp",
-            instructions="Freedcamp API server. Always use get_projects() and get_users() first to lookup IDs before other operations."
+            instructions="Freedcamp API server. CRITICAL: Always use filtering parameters (due_date_to, status_filter, etc.) instead of getting all data. Use get_projects() and get_users() first to lookup IDs."
         )
         self._setup_tools()
     
@@ -592,6 +592,8 @@ class FreedcampMCP:
                            include_completed: bool = False,
                            limit: int = 200,
                            offset: int = 0,
+                           due_date_from: Optional[str] = None,
+                           due_date_to: Optional[str] = None,
                            include_custom_fields: bool = False) -> Dict:
         """Get tasks assigned to a specific user with enhanced filtering"""
         params = {
@@ -606,6 +608,12 @@ class FreedcampMCP:
             status_values = ["0", "2"]  # not started and in progress
             for i, status in enumerate(status_values):
                 params[f"status[{i}]"] = status
+        
+        # Date filters (YYYY-MM-DD format)
+        if due_date_from:
+            params["due_date[from]"] = due_date_from
+        if due_date_to:
+            params["due_date[to]"] = due_date_to
         
         if include_custom_fields:
             params["f_cf"] = "1"
@@ -1135,7 +1143,7 @@ class FreedcampMCP:
             include_tags: bool = False,
             include_details: bool = False
         ) -> str:
-            """Get tasks with filtering. Essential fields by default, use include_details=True for full data."""
+            """Get tasks with date/status filtering. ALWAYS filter by due_date_to, status_filter, etc. instead of getting all tasks. Returns minimal fields by default."""
             try:
                 result = await self.get_all_tasks(
                     limit=limit, offset=offset, status_filter=status_filter,
@@ -1182,7 +1190,7 @@ class FreedcampMCP:
             include_tags: bool = False,
             include_details: bool = False
         ) -> str:
-            """Get project tasks. Essential fields by default, use include_details=True for full data."""
+            """Get project tasks with filtering. Use status and other filters to limit results. Returns minimal fields by default."""
             try:
                 result = await self.get_project_tasks(
                     project_id=project_id, status=status, limit=limit, offset=offset,
@@ -1221,14 +1229,17 @@ class FreedcampMCP:
             include_completed: bool = False,
             limit: int = 50,
             offset: int = 0,
+            due_date_from: Optional[str] = None,
+            due_date_to: Optional[str] = None,
             include_custom_fields: bool = False,
             include_details: bool = False
         ) -> str:
-            """Get user tasks. Essential fields by default, use include_details=True for full data."""
+            """Get user tasks with date filtering. ALWAYS use due_date_to='YYYY-MM-DD' to filter instead of getting all tasks. Returns minimal fields by default - only use include_details=True if you need full task descriptions."""
             try:
                 result = await self.get_user_tasks(
                     user_id=user_id, include_completed=include_completed,
-                    limit=limit, offset=offset, include_custom_fields=include_custom_fields
+                    limit=limit, offset=offset, due_date_from=due_date_from, due_date_to=due_date_to,
+                    include_custom_fields=include_custom_fields
                 )
                 
                 if include_details:
