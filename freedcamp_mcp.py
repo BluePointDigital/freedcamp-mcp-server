@@ -41,7 +41,7 @@ class FreedcampMCP:
         # Create FastMCP server
         self.mcp = FastMCP(
             name="freedcamp-mcp",
-            instructions="Freedcamp API server. CRITICAL: Always use filtering parameters (due_date_to, status_filter, etc.) instead of getting all data. Use get_projects() and get_users() first to lookup IDs."
+            instructions="Freedcamp API server. CRITICAL: Always use filtering parameters (due_date_to, status_filter, etc.) instead of getting all data. Workflow: get_projects() → get_task_lists() → get_users() to lookup IDs before creating tasks."
         )
         self._setup_tools()
     
@@ -967,14 +967,137 @@ class FreedcampMCP:
     async def delete_file(self, file_id: str) -> Dict:
         """Delete a file"""
         response = await self._make_request("DELETE", f"files/{file_id}")
+        return response.get("data", {})
+
+    # ====== FILE UPLOAD METHODS ======
+    
+    async def upload_file(self, 
+                         file_path: str,
+                         project_id: str,
+                         application_id: str = "2",  # 2 = Tasks application
+                         item_id: Optional[str] = None,
+                         comment_id: Optional[str] = None,
+                         temporary: bool = False) -> Dict:
+        """Upload a file to Freedcamp
         
-        if response.get("data"):
-            return {
-                "success": True,
-                "message": "File deleted successfully"
-            }
+        Args:
+            file_path: Path to the file to upload
+            project_id: Project ID
+            application_id: Application ID (2=Tasks, 6=Files, etc.)
+            item_id: Item ID (task ID if attaching to task)
+            comment_id: Comment ID if attaching to comment
+            temporary: If True, upload as temporary for later linking
+        """
+        import os
+        from pathlib import Path
         
-        return {"success": False, "message": "Failed to delete file"}
+        if not os.path.exists(file_path):
+            raise ValueError(f"File not found: {file_path}")
+        
+        # Prepare form data
+        data = {
+            "project_id": project_id,
+            "application_id": application_id,
+            "temporary": "1" if temporary else "0"
+        }
+        
+        if item_id:
+            data["item_id"] = item_id
+        if comment_id:
+            data["comment_id"] = comment_id
+        
+        # Prepare the file
+        file_name = Path(file_path).name
+        
+        # Create multipart form data
+        auth_params = self._generate_auth()
+        
+        async with httpx.AsyncClient() as client:
+            with open(file_path, 'rb') as file_content:
+                files = {
+                    'file': (file_name, file_content, 'application/octet-stream')
+                }
+                form_data = {
+                    'data': json.dumps(data),
+                    **auth_params
+                }
+                
+                response = await client.post(
+                    f"{BASE_URL}/files",
+                    data=form_data,
+                    files=files,
+                    timeout=30.0
+                )
+                
+                if response.status_code != 200:
+                    logger.error(f"File upload failed: {response.status_code} - {response.text}")
+                    raise Exception(f"File upload failed: {response.status_code}")
+                
+                result = response.json()
+                if result.get("http_code") != 200:
+                    raise Exception(f"API Error: {result.get('msg', 'Unknown error')}")
+                
+                return result.get("data", {})
+
+    # ====== TASK LIST MANAGEMENT METHODS ======
+    
+    async def get_task_lists(self, project_id: str) -> List[Dict]:
+        """Get all task lists (groups) for a project"""
+        response = await self._make_request("GET", f"lists/2", {"project_id": project_id})
+        
+        if response.get("data") and response["data"].get("lists"):
+            return response["data"]["lists"]
+        return []
+    
+    async def create_task_list(self, 
+                              project_id: str,
+                              title: str,
+                              description: Optional[str] = None) -> Dict:
+        """Create a new task list (group) in a project
+        
+        Args:
+            project_id: Project ID
+            title: Name of the task list
+            description: Optional description
+        """
+        data = {
+            "project_id": project_id,
+            "title": title
+        }
+        if description:
+            data["description"] = description
+        
+        response = await self._make_request("POST", "lists/2", data)
+        
+        if response.get("data") and response["data"].get("lists"):
+            return response["data"]["lists"][0]  # Returns the newly created list
+        return {}
+    
+    async def update_task_list(self,
+                              list_id: str,
+                              title: Optional[str] = None,
+                              description: Optional[str] = None) -> Dict:
+        """Update an existing task list
+        
+        Args:
+            list_id: Task list ID
+            title: New title (optional)
+            description: New description (optional)
+        """
+        data = {}
+        if title:
+            data["title"] = title
+        if description:
+            data["description"] = description
+        
+        if not data:
+            raise ValueError("At least one field (title or description) must be provided")
+        
+        response = await self._make_request("POST", f"lists/2/{list_id}", data)
+        
+        if response.get("data") and response["data"].get("lists"):
+            return response["data"]["lists"][0]  # Returns the updated list
+        return {}
     
     def _setup_tools(self):
         """Setup FastMCP tools using decorators"""
@@ -1322,14 +1445,15 @@ class FreedcampMCP:
             
             ⚠️ WORKFLOW REMINDER: Before creating tasks:
             1. Call get_projects() to find the correct project_id
-            2. Call get_users() to find correct assigned_to_id (if assigning)
-            3. Never assume or guess IDs - always look them up first!
+            2. Call get_task_lists(project_id) to find the correct task_group_id for organization
+            3. Call get_users() to find correct assigned_to_id (if assigning)
+            4. Never assume or guess IDs - always look them up first!
             
             Args:
                 title: Task title
                 project_id: Project ID where the task will be created (get from get_projects())
                 description: Task description (optional)
-                task_group_id: Task group/list ID (optional)
+                task_group_id: Task group/list ID (use get_task_lists() to find available lists)
                 priority: Task priority (0=none, 1=low, 2=medium, 3=high)
                 assigned_to_id: User ID to assign the task to (get from get_users(), use user_id field)
                 due_date: Due date in YYYY-MM-DD format (optional)
@@ -1580,6 +1704,136 @@ class FreedcampMCP:
             except Exception as e:
                 logger.error(f"Error deleting file: {e}")
                 return f"Error: {str(e)}"
+        
+        # ====== FILE UPLOAD TOOLS ======
+        
+        @self.mcp.tool(name="upload_file_to_task")
+        async def upload_file_to_task_tool(
+            file_path: str,
+            project_id: str,
+            task_id: str
+        ) -> str:
+            """Upload a file and attach it to a specific task
+            
+            Args:
+                file_path: Local path to the file to upload
+                project_id: Project ID where the task belongs
+                task_id: Task ID to attach the file to
+            """
+            try:
+                result = await self.upload_file(
+                    file_path=file_path,
+                    project_id=project_id,
+                    application_id="2",  # Tasks application
+                    item_id=task_id,
+                    temporary=False
+                )
+                return json.dumps(result, indent=2)
+            except Exception as e:
+                logger.error(f"Error uploading file to task: {e}")
+                return f"❌ Error: {str(e)}"
+        
+        @self.mcp.tool(name="upload_file_to_project")
+        async def upload_file_to_project_tool(
+            file_path: str,
+            project_id: str
+        ) -> str:
+            """Upload a file to project files (not attached to specific task)
+            
+            Args:
+                file_path: Local path to the file to upload
+                project_id: Project ID to upload the file to
+            """
+            try:
+                result = await self.upload_file(
+                    file_path=file_path,
+                    project_id=project_id,
+                    application_id="6",  # Files application
+                    temporary=False
+                )
+                return json.dumps(result, indent=2)
+            except Exception as e:
+                logger.error(f"Error uploading file to project: {e}")
+                return f"❌ Error: {str(e)}"
+        
+        @self.mcp.tool(name="upload_temporary_file")
+        async def upload_temporary_file_tool(
+            file_path: str,
+            project_id: str
+        ) -> str:
+            """Upload a file as temporary for later attachment when creating tasks/comments
+            
+            Args:
+                file_path: Local path to the file to upload
+                project_id: Project ID
+            """
+            try:
+                result = await self.upload_file(
+                    file_path=file_path,
+                    project_id=project_id,
+                    application_id="2",  # Tasks application
+                    temporary=True
+                )
+                return json.dumps(result, indent=2)
+            except Exception as e:
+                logger.error(f"Error uploading temporary file: {e}")
+                return f"❌ Error: {str(e)}"
+        
+        # ====== TASK LIST MANAGEMENT TOOLS ======
+        
+        @self.mcp.tool(name="get_task_lists")
+        async def get_task_lists_tool(project_id: str) -> str:
+            """Get all task lists (groups) for a project. Use this to find the right task_group_id when creating tasks.
+            
+            Args:
+                project_id: Project ID to get task lists for
+            """
+            try:
+                result = await self.get_task_lists(project_id)
+                return json.dumps({"task_lists": result}, indent=2)
+            except Exception as e:
+                logger.error(f"Error getting task lists: {e}")
+                return f"❌ Error: {str(e)}"
+        
+        @self.mcp.tool(name="create_task_list")
+        async def create_task_list_tool(
+            project_id: str,
+            title: str,
+            description: Optional[str] = None
+        ) -> str:
+            """Create a new task list (group) in a project
+            
+            Args:
+                project_id: Project ID to create the list in
+                title: Name of the new task list
+                description: Optional description for the task list
+            """
+            try:
+                result = await self.create_task_list(project_id, title, description)
+                return json.dumps(result, indent=2)
+            except Exception as e:
+                logger.error(f"Error creating task list: {e}")
+                return f"❌ Error: {str(e)}"
+        
+        @self.mcp.tool(name="update_task_list")
+        async def update_task_list_tool(
+            list_id: str,
+            title: Optional[str] = None,
+            description: Optional[str] = None
+        ) -> str:
+            """Update an existing task list (group)
+            
+            Args:
+                list_id: Task list ID to update
+                title: New title (optional)
+                description: New description (optional)
+            """
+            try:
+                result = await self.update_task_list(list_id, title, description)
+                return json.dumps(result, indent=2)
+            except Exception as e:
+                logger.error(f"Error updating task list: {e}")
+                return f"❌ Error: {str(e)}"
     
     async def run_stdio(self):
         """Run the MCP server with stdio transport"""
