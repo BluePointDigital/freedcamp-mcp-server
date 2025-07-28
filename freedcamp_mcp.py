@@ -149,8 +149,8 @@ class FreedcampMCP:
     
     def _format_minimal_task(self, task: Dict) -> Dict:
         """Essential task fields for browsing/listing - optimized for token efficiency"""
-        # Use due_date directly (API returns it as YYYY-MM-DD string, not timestamp)
-        due_date = task.get("due_date") or None
+        # Handle both date formats: API docs say due_ts (timestamp) but actual API returns due_date (string)
+        due_date = task.get("due_date") or self._format_date(task.get("due_ts", 0)) or None
         
         return {
             "id": task["id"],
@@ -392,8 +392,8 @@ class FreedcampMCP:
             "task_group_id": task.get("task_group_id"),
             "task_group_name": task.get("task_group_name"),
             "created_at": self._format_timestamp(task.get("created_ts", 0)),
-            "due_date": task.get("due_date") or None,
-            "start_date": task.get("start_date") or None,
+            "due_date": task.get("due_date") or self._format_date(task.get("due_ts", 0)) or None,
+            "start_date": task.get("start_date") or self._format_date(task.get("start_ts", 0)) or None,
             "completed_at": self._format_timestamp(task.get("completed_ts", 0)) if task.get("completed_ts") else None,
             "comments_count": task.get("comments_count", 0),
             "files_count": task.get("files_count", 0),
