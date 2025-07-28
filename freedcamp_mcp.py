@@ -37,6 +37,7 @@ class FreedcampMCP:
     def __init__(self, config: FreedcampConfig):
         self.config = config
         self.client = httpx.AsyncClient()
+        self._project_cache = {}  # Cache project names by ID
         
         # Create FastMCP server
         self.mcp = FastMCP(
@@ -152,6 +153,10 @@ class FreedcampMCP:
         # Handle both date formats: API docs say due_ts (timestamp) but actual API returns due_date (string)
         due_date = task.get("due_date") or self._format_date(task.get("due_ts", 0)) or None
         
+        # Get project name from cache or use "Unknown Project"
+        project_id = task.get("project_id")
+        project_name = self._project_cache.get(project_id, "Unknown Project") if project_id else "Unknown Project"
+        
         return {
             "id": task["id"],
             "title": task["title"],
@@ -159,8 +164,8 @@ class FreedcampMCP:
             "priority_title": task.get("priority_title", "None"),
             "assigned_to_fullname": task.get("assigned_to_fullname", "Unassigned"),
             "due_date": due_date,
-            "project_id": task.get("project_id"),
-            "project_name": task.get("project_name", "Unknown Project"),
+            "project_id": project_id,
+            "project_name": project_name,
             "task_group_name": task.get("task_group_name"),
             "url": task.get("url", "")
         }
@@ -171,8 +176,19 @@ class FreedcampMCP:
             "user_id": user["user_id"],
             "name": user["full_name"]
         }
-    
+
     # ====== PROJECT MANAGEMENT ======
+    
+    async def _populate_project_cache(self) -> None:
+        """Populate the project cache with all project names"""
+        if not self._project_cache:  # Only fetch if cache is empty
+            try:
+                projects = await self.get_all_projects()
+                for project in projects:
+                    self._project_cache[project.get("id")] = project.get("name", "Unknown Project")
+            except Exception as e:
+                print(f"Warning: Could not populate project cache: {e}")
+                # Continue without cache - will show "Unknown Project"
     
     async def get_all_projects(self, include_recent: bool = False) -> List[Dict]:
         """Get all projects grouped by their group name"""
@@ -463,7 +479,10 @@ class FreedcampMCP:
                           order_direction: str = "asc",
                           include_custom_fields: bool = False,
                           include_tags: bool = False) -> Dict:
-        """Get all tasks with advanced filtering and pagination"""
+        """Get all tasks with comprehensive filtering and pagination"""
+        # Populate project cache for name mapping
+        await self._populate_project_cache()
+        
         params = {
             "limit": str(limit),
             "offset": str(offset)
@@ -542,6 +561,9 @@ class FreedcampMCP:
                               include_custom_fields: bool = False,
                               include_tags: bool = False) -> Dict:
         """Get tasks for a specific project with enhanced filtering"""
+        # Populate project cache for name mapping
+        await self._populate_project_cache()
+        
         params = {
             "project_id": project_id,
             "limit": str(limit),
@@ -597,6 +619,9 @@ class FreedcampMCP:
                            due_date_to: Optional[str] = None,
                            include_custom_fields: bool = False) -> Dict:
         """Get tasks assigned to a specific user with enhanced filtering"""
+        # Populate project cache for name mapping
+        await self._populate_project_cache()
+        
         params = {
             "assigned_to_id[]": user_id,
             "limit": str(limit),
@@ -980,8 +1005,8 @@ class FreedcampMCP:
                          comment_id: Optional[str] = None,
                          temporary: bool = False) -> Dict:
         """Upload a file to Freedcamp
-        
-        Args:
+            
+            Args:
             file_path: Path to the file to upload
             project_id: Project ID
             application_id: Application ID (2=Tasks, 6=Files, etc.)
