@@ -1,0 +1,2043 @@
+Description
+This wiki describes Freedcamp public API things. 
+
+API end point: https://freedcamp.com/api/v1/.
+Postman collection which contains ready-to-go requests.
+Usage example (PHP).
+
+Setup
+To setup API for you please:
+
+
+
+1 - go to My Account/Integrations/API
+
+2 - generate a new API key
+
+3 - to access this page
+
+Authentification
+You may generate API keys on the Integrations/API tab on My Account page. There are two types of keys: secured by API secret and not secured (you may change the type when you want). We highly recommend to use Secured keys for your needs when possible, but for quick testing, you may want to omit additional security.
+
+Not secured API keys
+Just pass the api_key with the key value as a GET or POST parameter, for example:
+
+https:// freedcamp.com/api/v1/sessions/current?api_key=api_key
+Not secured API keys have expiration time in one week. This can be changed later.
+
+Note that anyone who has access to your active not secured API key can do most of the actions available via API. NEVER share unsecured API key with anyone. If you suspect a key leak, please convert the key to the secured with API secret or delete it. We'll forbid some types of actions (like project or account deletion) for not secured keys soon.
+
+Zapier API keys
+These keys are used for Zapier integration. These keys will only work for Zapier requests. Note that anyone who has access to your Zapier API key is also able to connect to your Freedcamp data with Zapier. These keys also have restricted permissions.
+
+Secured API keys
+To auth with these keys, except the key itself you need to also pass a timestamp and hash parameters. A timestamp is the request timestamp (check you have properly set time on your server), and a hash is calculated using API secret in this way (PHP code for example):
+
+$hash = hash_hmac('sha1', $api_key . $timestamp, $api_secret);
+So the request will look like:
+
+https:// freedcamp.com/api/v1/sessions/current?api_key=api_key&timestamp=current_ts&hash=your_hash
+Get your API secret on the API tab on My Account page (you will need to enter your password). NEVER share API secret with anyone and do not pass it publicly. Let us know if you suspect API secret key leak.
+Please check the "Calculating hash for secured API key" chapter below for more details.
+
+Passing API key in the header
+To not pass the API key as an URL parameter or inside POST body you may pass it via X-API-KEY header. This approach is used in requests in Postman collection.
+
+Other methods
+We plan to implement Oauth2 auth later on.
+
+Examples
+Postman collection which contains ready-to-go requests. Check "Setting up Postman" section below for details.
+Usage example (PHP).
+
+Request
+If a request should be done with any non-GET parameters (except auth parameters), it's supposed that they are passed as a form-data parameter with name 'data' and JSON-encoded value.
+
+Example:
+
+data: {"email": "test@email.com", "password": "11111111"}
+You may pass your auth credentials as POST data as well as in the GET with payload:
+
+api_key: api_key
+timestamp: current_ts
+hash: your_hash
+data: {"email": "test@email.com", "password": "11111111"}
+PUT requests
+All "update" requests which are described as PUT below should use POST requests. "Update" requests differ from "add" requests by passing id of the modified item. Later we may support PUT requests for updates.
+
+Response
+Each response returns JSON-encoded JS object with the following fields:
+
+name	description
+http_code	duplicates HTTP code passed in headers.
+msg	'OK' on successful request, an error description otherwise.
+error_id	in the case when an error occurred and was logged by API, will contain corresponding error_id you can use to refer to in your support request to Freedcamp.
+maintenance (can be absent)	in the case when there is active or upcoming Freedcamp maintenance scheduled (see Maintenance below).
+data	specific for the request data, empty if an error happened or nothing to return. If there were some errors to show to a user, they will be placed under "errors" field. errors.general means some general error, errors._some_filed_name_ - means that error is for some posted field (like validation error).
+Examples of unsuccessful requests responses:
+
+{
+  "http_code": 500,
+  "msg": "Server error occurred.",
+  "error_id": 1621951,
+  "data": [errors: {"general": "Server error occurred, please try onу more time."}]
+}
+
+{
+  "http_code": 401,
+  "msg": "Wrong credentials",
+  "error_id": 0,
+  "data": []
+}
+
+{
+  "http_code": 404,
+  "msg": "Unknown method",
+  "error_id": 0,
+  "data": []
+}
+Maintenance
+When API endpoint is in the maintenance mode or there is upcoming maintenance, API, in addition to standard fields (msg, data, etc.), returns maintenance field on each request, which has the next fields:
+
+name	description
+start_ts	a timestamp of maintenance start
+duration	the planned duration of the maintenance in minutes. A client should use it to inform users about planned time for service recovery ( which can be calculated as [start_ts + duration * 60]). The actual duration can be less than this value (if we finished maintenance sooner). Duration value may increase during the maintenance but has a low probability.
+msg	a string with additional info for users about maintenance reasons. It can be empty. If it is not empty, should be shown somehow to the users in the client message about maintenance
+start_ts	a timestamp of maintenance start
+duration	the planned duration of the maintenance in minutes. A client should use it to inform users about planned time for service recovery ( which can be calculated as [start_ts + duration * 60]). The actual duration can be less than this value )if we finished maintenance sooner). Duration value may increase during the maintenance but has a low probability.
+Example:
+
+  "maintenance": {
+    "start_ts": 1479848400,
+    "duration": 60,
+    "msg": ""
+  }
+Usually, maintenance field is being sent 60 minutes before the maintenance.
+
+If Freedcamp AOI endpoint is already in the maintenance mode, it returns HTTP 503 in headers (and still returns the maintenance field):
+
+{
+  "http_code": 503,
+  "msg": "Maintenance is in progress",
+  "error_id": 0,
+  "maintenance": {
+    "start_ts": 1479848400,
+    "duration": 60,
+    "msg": ""
+  },
+  "data": {}
+}
+No actions were executed if API endpoint returned 503.
+
+A client should not send requests more often than one per minute while getting 503 in response.
+
+It's possible that web-interface is in maintenance mode and API endpoint is not and vice versa.
+
+Common filtration and ordering
+For some endpoints fetching the application items (like /tasks, /times, /issues, etc.) except the way described in the chapters, there is a hack - a quick way to get several filters combination for your API request:
+
+1. Open the application on freedcamp.com (web UI).
+2. Apply all needed filters and order.
+3. Copy url with applied filters:
+
+
+4. Extract GET parameters and add them to your API request:
+
+
+Supported methods
+/sessions
+Used to start a new session, get information about a current session or close a current session.
+Sessions are identified by a session token. Each device has own token with TTL of 1 week after the last action done in this session.
+If you have no active token when setting up the session, a new token will be created and returned, otherwise, the old one will be returned.
+
+GET
+Only /sessions/current will work.
+Returns the same data as POST request returns except for a token.
+
+POST
+WARNING: Is not supported now
+
+Returns session token and all info needed for the initial screen if valid email/password are passed. X-API-TOKEN should be empty. HTTP code 401 will be returned if a user can't be logged in using given credentials.
+
+Input data: email, password, oauth_provider, oauth_access_token
+
+name	description
+email	should be always present except when signing in via Twitter which does not provide us with user's email
+password	user password, can be empty when using OAuth token to sign in
+oauth_provider	for signing in by OAuth provider,  should contain provider unique name. Allowed names are "facebook", "linkedin", "google", "twitter". It can be empty or absent if signing in by email+password.
+oauth_access_token	
+mobile_app_version	a version of the mobile app.
+Output (inside 'data'):
+
+name	description
+projects	a list of all projects which user has access to.
+users	a list of all users which current user can see in the projects he has access to. See structure example under /users request description.
+groups	a list of all project groups which user has access to. Note that projects are ordered inside each group. To recreate projects order in projects dropdown in Web UI you should refer to groups list and projects list inside them. See structure example under /groups:GET request description.
+notifications_count	unread notifications count
+token	a session token to use further for API request inside headers
+user_id	the user id of the session user
+Example of structure:
+"projects": [
+      {
+        "project_id": "914936",
+        "role_name": "User",
+        "role_type": "0",
+        "project_name": "sdcscsdcscsdc",
+        "project_description": "sdcsdcsdcsdcsdc",
+        "project_color": "A86D54",
+        "f_active": true,
+        "project_unique_name": "by_api_6OI",
+        "f_favorite": false,
+        "f_can_delete": false,
+        "f_can_manage": false,
+        "f_can_leave": true,
+        "notifications_count": 0,
+        "users": [
+          132942,
+          309953,
+          340312,
+          377037,
+          377039,
+          377040
+        ],
+        "applications": [
+                  6
+            ]
+        },
+      "groups": [....],
+      ...
+   ]
+applications: (currently disabled) list of all Freedcamp applications. Structure example:
+"applications": [
+      {
+        "app_id": "1",
+        "name": "Wall"
+      },
+      "2": {
+        "app_id": "2",
+        "name": "To-Do's"
+      },
+      ...
+   ]
+DELETE
+WARNING: Is not supported now
+
+Only /sessions/current will work.
+
+Closes current session, and invalidates current session token (so all devices have to set up a new session again).
+
+/groups
+GET
+Output:  
+
+groups: array with available groups Structure example:
+
+    groups": [
+      {
+        "group_id": "267229",
+        "name": "groupNamenew",
+        "description": "some descr",
+        "group_unique_name": "as_9Ra",
+        "projects": [
+          "415078",
+          "415079",
+        ],
+        "applications": [],
+        "f_managed": true
+      },
+      {
+        "group_id": "267230",
+        "name": "fname's Projects",
+        "description": "",
+        "group_unique_name": "a12_3ec",
+        "projects": [
+          "415080"
+        ],
+        "applications": [],
+        "f_managed": true
+      },
+      ...
+f_managed: user can create projects or move them only into managed groups
+
+/projects
+GET
+/projects - returns the same data as /sessions/current:GET request returns except user_id. You may pass "f_recent_projects_ids=1" GET parameter, then the response will contain 'recent_project_ids' array with recently visited projects ids (the same as on projects dashboard). Order is from most recently visited to less recently. Only projects visited using web UI are marked as recent. Avoid using f_recent_projects_ids too often (for example more than once an hour).
+
+/projects/project_id - returns the same data as /sessions/current:GET request returns except:  
+
+    1) user_id is not returned;
+
+    2) "projects" array contains only specified project (or it's empty if a project is not found)
+
+    3) project inside "projects" array has additional field "notifications", containing all unread notifications. See /notifications for "notifications" structure description.
+
+    4) project inside "projects" array has an additional field "f_subtasks_adv", containing boolean true or false. It reflects if a user is able to create advanced subtasks in the project.
+
+    5) project inside "projects" array has an additional field "f_can_add_tasks", containing boolean true or false. It reflects if a user is able to create tasks in the project.
+
+POST
+Input data: 
+
+name	description
+project_name	can be empty if f_first = 1 (default will be used). Max allowed length is 255 symbols, the recommended length is ~50 symbols.
+project_description	can be empty
+project_color	can be empty or contain HEX number (w/o "#")
+todo_view_type    	kanban|default, so far use "default" value
+group_id	project group. If empty, group_name should be set
+group_name	if it is not empty, will be created a new group with this name (passed group_id will be ignored). When f_first is true, both group_id and group_name can be empty - the default group will be created. Otherwise, an error will be triggered.
+changed_users	list of invitations to users. It can be empty or absent. See projects/project_id:PUT for structure description (only "added" users will be processed)
+Example: 
+
+{  
+   "project_name":"Name",
+   "project_description":"Some descr",
+   "project_color":"34ad22",
+   "todo_view_type":"kanban",
+   "f_first":true,
+   "group_id":"",
+   "group_name":"new group",
+   "changed_users":{  
+      "added":[  
+         {  
+            "row_id":"any_id_to_link_validation_to_email",
+            "email":"some_email",
+            "first_name":"fir!!st_name",
+            "last_name":"last!!_name"
+         },
+         {  
+            "row_id":"any_id_to_link_validation_to_email",
+            "email":"some_email",
+            "first_name":"first_name2",
+            "last_name":"last_name2"
+         }
+      ]
+   }
+}
+Output (inside 'data'): the same as for /projects/project_id:GET
+
+PUT
+(actual request should be /projects/project_id:POST)
+
+Input data: 
+
+name	description
+project_name	mandatory
+project_description	can be empty
+project_color	mandatory
+group_id	mandatory if group_name is empty
+group_name	mandatory if group_id is empty. If present, group_id is ignored
+f_active	optional. Possible values: true|false. If it is present, will change project state according to the value.
+f_only_users_update	optional. Possible values: true|false. If it is present, will change project users only.
+changed_users	list of added, deleted and updated users. It can be empty or absent. See projects/project_id:POST for structure description.
+Changed users structure example is below:
+
+{
+	"added": [{
+		"row_id": "any_id_to_link_validation_to_email",
+		"email": "some_email",
+		"first_name": "fir!!st_name",
+		"last_name": "last!!_name"
+	}],
+	"updated": [{
+		"user_id": "309953",
+		"team_id": "7000"
+	}],
+	"deleted": [{
+		"user_id": "377131"
+	}, {
+		"user_id": "377132"
+	}]
+}
+Fields for an element inside added:
+
+name	description
+row_id	invitation id (generated by client app) - if this invitation is in error, id will be used to link error to the invitation in the response
+email	mandatory
+first_name	can be empty
+last_name	can be empty
+Fields for an element inside updated:
+
+name	description
+user_id 	mandatory
+team_id 	the same as role_id (later role_id where it present will be team_id). This is the only field available for editing.
+Fields for an element inside deleted:
+
+name	description
+user_id 	mandatory
+Example of /projects/project_id:POST request:
+
+{
+	"project_name": "Name",
+	"project_description": "Some descr",
+	"project_color": "34ad22",
+	"todo_view_type": "kanban",
+	"f_first": true,
+	"group_id": "267282",
+	"group_name": "new group",
+	"changed_users": {
+		"updated": [{
+			"user_id": "309953",
+			"team_id": "7000"
+		}],
+		"deleted": [{
+			"user_id": "377131"
+		}, {
+			"user_id": "377132"
+		}]
+	}
+}
+Output (inside 'data'): the same as for /projects/project_id:GET
+
+DELETE
+WARNING: Is not supported now
+
+/projects/project_id:DELETE
+
+/overviews
+Deprecated, use /projects/project_id?f_for_overview_app=1 instead.
+
+GET
+/overviews/project_id - returns requested project Overview application data.
+
+Output:
+
+projects: list of projects with the following fields:
+
+project_id	project id
+start_ts	null if it was not set
+end_ts	null if it was not set
+managers	an array of manager ids (is specific only to the Overview application and does not have any relation to permissions or users access of the project)
+cf_tpl_id	custom fields template id (if linked with the project)
+custom_fields	(absent if custom fields template isn't linked with the project) an array of custom field values used for the project
+app_id	37
+If a custom field template was associated with the project, this template will be returned in a separate "cf_tpls" array. An example of its structure is described here.
+
+'project_updates' contains an array of the project updates. The structure is the same as /comments:POST returns, described here.
+
+Output example:
+
+"projects": [
+    {
+        "project_id": "561",
+        "start_ts": 1609452000,
+        "end_ts": 1614549600,
+        "managers": [
+            "189",
+            "288"
+        ],
+        "cf_tpl_id": "70",
+        "custom_fields": [
+            {
+                "cf_id": "281",
+                "value": "2024-03-01"
+            },
+            {
+                "cf_id": "282",
+                "value": "NOTE is here"
+            }
+        ],
+        "app_id": "37"
+    }
+],
+"cf_tpls": [
+    {...}
+],
+"project_updates": [
+    {...},
+    {...},
+    {...}
+]
+/invitations
+GET
+/invitations - returns the list of all user's pending invitations to projects. Each element contains group_name, project_name, hash, and invited_by_user fields. 
+
+invited_by_user has the same structure as user array structure returned by /users:GET request. Note that email is always NULL. 
+
+The API endpoint returns extended data (instead of just project_id and invited_by_id) as a user is not yet a part of any project. Information for such invited user can't be obtained by standard /projects and /users requests.
+
+Example:
+
+"invitations": [
+      {
+        "group_name": "Some group",
+        "project_name": "Some project",
+        "hash": "f543a44968d5214c7511e071be0f6ec4",
+        "invited_by_user": {
+          "user_id": "1231122",
+          "first_name": "bear_d",
+          "last_name": "",
+          "avatar_url": "http://some_url",
+          "full_name": "bear_d",
+          "email": null,
+          "timezone": "Europe/Athens"
+        }
+      }
+    ]
+PUT
+(actual request should be /invitations:POST)
+
+Input data: an array of objects with hash and action keys
+
+name	description
+hash 	invitation hash you get by /invitations:GET
+action 	what to do with the invitation. Possible actions are 'accept' and 'decline'.
+Request data example:
+
+{
+	"invitations": [{
+		"hash": "bc4fcff30a99d7524ef36855a95f54a8",
+		"action": "accept"
+	}, {
+		"hash": "aaafcff30a99d7524ebbb855a95f54a8",
+		"action": "decline"
+	}]
+}
+Output: the same as for /invitations:GET
+
+/users
+GET
+Input data:
+
+/users - returns all users visible to the current user
+
+/users/current - returns current user data
+
+/users/user_id  - returns "users" array containing only specified user data, if the current user has permissions to see him. Empty "users" array otherwise
+
+Output:
+
+users: array with requested users data. Structure example:
+
+    "users": {
+      [
+        "user_id": "132942",
+        "first_name": "f",
+        "last_name": "",
+        "avatar_url": "https:\\/\\/freedcamp-avatars-test.s3.amazonaws.com\\/4b322be59237277135526b97d1e86de2.jpg",
+        "full_name": "f",
+        "email": "bear@test.com",
+        "timezone": "America/New_York"
+      ],
+      [
+        "user_id": "132944",
+        "first_name": "fsdc",
+        "last_name": "sdcd",
+        "avatar_url": "https:\\/\\/freedcamp-avatars-test.s3.amazonaws.com\\/4b33322be59237277135526b97d1e86de2.jpg",
+        "full_name": "f s.",
+        "email": null,
+        "timezone": "America/New_York"
+      ],
+      ...
+Note: "email" field is null if requesting user does not have permissions to see it.
+
+POST
+Input data: email, password, first_name, last_name, oauth_provider, oauth_id (inside the data), additional form FILE field - avatar file.
+
+name	description
+email	required
+password 	can be empty in a case when oauth_provider parameter is passed
+first_name	required
+last_name 	can be empty
+oauth_provider	if a user has done an unsuccessful login attempt using OAuth provider previously, an app may fill this field and oauth_access_token field with appropriate data to get user linked with the provider right after the registration. If OAuth provider has provided the app with email and first name, you can directly issue this request with an empty password (will be generated on the server side) without displaying a register screen to the user. Note that in case of returned errors (like empty email field) these errors will still correspond to register screen. A field can be empty or absent.
+oauth_access_token	should be present if oauth_provider is set, can be empty or absent otherwise
+mobile_app_version	a version of the mobile app
+As to the avatar attached - please note, the maximum available square portion of the image will be used as an avatar (will be used the central part of the image), and it will be resized to 100*100 px.
+
+X-API-TOKEN should be empty.
+
+Example:
+
+data: {"email": "bear+ss@deepshiftlabs.com", "password": "1111111111", "first_name": "fname", "last_name": "sdc"}
+
+avatar: binary file data*
+
+* i. e. request body contains 2 fields, string "data" and file "avatar", encoded as a form-data
+
+Output: the same as /sessions:POST returns
+
+PUT
+(actual request should be /users/current:POST)
+
+Input data: 
+
+name	description
+email	can be empty or absent. If present and differes from the current one, confirmation_password should be passed.
+password 	SHOULD be empty or absent if user does not change it. If passed, confirmation_password should be passed also.
+first_name	It can not be empty
+last_name 	It can be empty
+confirmation_password	Active password should be passed only when email or/and password are changed
+timezone	User's timezone. To get a list of available timezones, use /timezones:GET
+To update avatar, use /avatars/current:POST.
+
+Request data example:
+
+{
+	"email": "some@freedcamp.com",
+	"password": "",
+	"first_name": "333",
+	"last_name": "44444",
+	"confirmation_password": "",
+	"timezone": "America/New_York"
+}
+Output: the same as for /users/user_id:GET, also may contain token (see below).
+
+WARN! If email and/or password is changed, a user will be logged out from all devices, including the current one (current token becomes invalid). So if a token is returned in the response, an application SHOULD replace the old token with this new one. Output example with a token is below. When different tokens for different sessions are implemented, a token will not become obsolete.
+
+  "data": {
+    "users": [
+      {...}
+    ],
+    "token": "cc76fec61451717732153334d7e986acb380fcb2"
+  }
+DELETE
+See /wipe for user deletion.
+
+/wipe
+/wipe/current
+
+GET
+WARN: Not allowed publicly, for now,
+
+is used to get information about the account before deleting it. Currently, it returns the only flag f_password_needed.
+
+Output data:
+
+name	description
+f_password_needed	true or false. Not active or accounts created recently can be deleted w/o password confirmation, so you should check f_password_needed and do not ask the user for a password confirmation if it's false.
+Output example:
+
+  "data": {
+    "f_password_needed": true
+  }
+POST
+WARN: Not allowed publicly for now
+
+is used to delete a user account and all linked data
+
+Input data:
+
+name	description
+password 	confirmation password. It can be empty or absent if f_password_needed returned by /wipe:GET is false
+Input example:
+
+    {"password": "11111111"}
+
+/password_reset_emails
+POST
+If successful, an email to the given email will be sent with the reset key inside which should be used in /passwords:POST request then
+
+Input data: email
+
+Example:
+
+{"email": "xxx@xxxxx.com"}
+Output (inside 'data'):
+
+msg: Message you may show to the user, like "Reset key has been sent to xxx@xxx.com"
+
+/passwords
+Allows to set a new password using reset password key sent by issuing /password_reset_emails:POST request
+
+POST
+Input data:
+
+password: new password.
+
+name	description
+reset_key	password reset key from the email
+Example:
+
+{"password": "11111111", "reset_key": "xxx"}
+/avatars
+POST
+I plan to use only POST requests for all actions related to files uploading because of PUT limitations in PHP when working with files. That's why avatar update is not under the /users/current:PUT request.
+
+Input data: 
+
+form FILE field - binary avatar file (not inside the data parameter with JSON)
+
+example:
+
+avatar: binary file data*
+
+* request body should be encoded as a form-data
+
+Output:
+
+avatar: an object which contains a new avatar URL. Example:
+
+    "avatar": {
+      "avatar_url": "https:\\/\\/freedcamp-avatars-test.s3.amazonaws.com\\/4b322be59235557135526b97d1e86de2.jpg"
+    }
+DELETE
+Use /avatars/current to reset the avatar to a default generated an image.
+
+Output: the same as for /avatars/current:POST.
+
+/notifications
+GET
+/notifications - returns "notifications" array inside data for all projects.
+WARN! - can be slow, please avoid to call it too often.
+
+/notifications/project_id - returns "notifications" array inside data for given project id.
+
+Filtration
+
+By default, you get all notifications or all unread notifications in the project. To get unread notifications only for the items you are following (equal to "Things I follow" filter in web UI), pass a following=1 parameter:
+
+/notifications?following=1 or /notifications/project_id?following=1.
+
+Output:
+
+notifications: Array of items with unread actions for the specified project. Read notifications are considered to be added later. Example:
+
+    "notifications": [
+          {
+            "project_id": "344",
+            "item_u_key": "267220_415075_2_488",
+            "app_id": "2",
+            "item_id": "488",
+            "item_title": "sdfvsdvsdvf",
+            "f_read": false,
+            "last_action_ts": 1438178379,
+            "actions": [
+              {
+                "description_raw": "bear2 b. added todo.",
+                "description": "bear2 b. added todo.",
+                "action_ts": 1439569606,
+                "action_type": 1
+              }
+            ]
+          },
+          {
+            "project_id": "344",
+            "item_u_key": "267220_415075_2_487",
+            "app_id": "2",
+            "item_id": "487",
+            "item_title": "tergertg",
+            "f_read": false,
+            "last_action_ts": 1438178379,
+            "actions": [
+              {
+                "description_raw": "bear2 b. <p>said</p>: фscasdc<br />\n",
+                "description": "bear2 b. said: фscasdc\n ",
+                "action_ts": 1439569566,
+                "action_type": 9
+              },
+              {
+                "description_raw": "bearr s. added todo.",
+                "description": "bearr s. added todo.",
+                "action_ts": 1439551062,
+                "action_type": 1
+              }
+            ]
+name	description
+project_id	project id of notification
+item_u_key	id for item notifications, use it for "mark as read" request
+f_read 	is always true as now we return only unread notifications
+last_action_ts	used for setting item as read to determine if a user has seen the actual version
+actions 	an array of actions, more recent actions first. "description_raw" may contain HTML tags, they are stripped in "description" field.
+action_type	see types list in the Constants wiki
+PUT
+(actual request should be /notifications:POST)
+
+Input data: 
+
+name	description
+new_state 	new state of notifications, possible values - read
+items 	an array of items to apply the state to.
+Structure of items array:
+item_u_key 
+last_action_ts
+
+Request data example:
+
+{
+	"new_state": "read",
+	"items": [{
+		"item_u_key": "267200_415044_2_2034232",
+		"last_action_ts": "425235345"
+	}]
+}
+/validations
+GET
+/notifications/email - checks if email used for an invitation is valid and does not exist in the project, also returns avatar URL if check passed. Probably these actions will be split/moved to different API URLs after discussions.
+
+"email" in URL means a type of validation. 
+
+Input:
+
+name	description
+email	email to validate
+project_id	optional. If set, an output will contain an error if the email is already present in the project users
+Request example: 
+
+    data:   {"email": "", "project_id": "423242"}
+Output:
+
+avatar_url - on success
+
+Example:
+
+    "avatar_url": "https://freedcamp-avatars-test.s3.amazonaws.com/534d29407bfce199827779dbb4b4a3c8e_6eabef.png"
+/tasks
+GET
+/tasks - returns a list of all tasks user has access to
+
+/tasks/?project_id=xxx - list of tasks in the project
+
+/tasks/task_id - list of tasks which contains only the task with given task_id
+
+Custom fields
+
+To include custom fields data in the response you need to add "f_cf=1" parameter, example: /tasks/?project_id=xxx&f_cf=1. Only fetch is supported for custom fields (no insert/update/delete). When you pass f_cf=1, the response will contain an additional array of custom fields templates used in the resulting task list.
+
+Tags
+
+You may pass "f_include_tags=1" GET parameter, then the response will contain 'tags' array with tag ids assigned to the item.
+
+Limits
+
+All /tasks:GET requests support limit and offset parameters. Example: "/tasks?limit=2&offset=2". Current default (and maximum allowed) limit for public API is 200.
+
+All responses contain "meta" field:
+
+    "meta": {
+        "has_more": true, // always presents
+        "total_count": 1362 // presents if has_more = true
+    }
+name	description
+has_more	is true if there are more results after the last returned result in the response, and false otherwise.
+total_count	presents if show_more = true and contains all available results count.
+WARN: currently limit, offset, total_count values are applied to the top-level tasks. All subtasks are ignored when a limit is applied, and total_count is calculated.
+
+Example
+
+To fetch all the tasks, you need to execute set of requests like
+
+https://freedcamp.com/api/v1/tasks?limit=200&offset=0
+https://freedcamp.com/api/v1/tasks?limit=200&offset=200
+https://freedcamp.com/api/v1/tasks?limit=200&offset=400
+....
+
+while there are results or meta.has_more is true.
+Each request may return more than 200 tasks, if there are subtasks. All subtasks of the task are always returned in the one request (are not split between pages).
+
+Filtration and order
+
+/tasks and /tasks/?project_id=xxx requests support filtration and ordering. Filters/order can be applied in any combination.
+
+Supported filters:
+
+name	description
+status	check constants wiki for possible values. For example, to get only not started and started tasks, you should use:  "/tasks?status[]=0&status[]=2"
+assigned_to_id	accepts integer values containing user id or one of Assignments constants from constants wiki
+created_by_id	accepts integer values containing user id
+due_date[from]	accepts a date in format YYYY-MM-DD. If set, only tasks with the due date set and due date >= due_date[from] will be returned
+due_date[to]	accepts a date in format YYYY-MM-DD. If set, only tasks with the due date set and due date <= due_date[to] will be returned
+created_date[from]	accepts a date in format YYYY-MM-DD. If set, only tasks with the creation date >= created_date[from] will be returned
+created_date[to]	accepts a date in format YYYY-MM-DD. If set, only tasks with the creation date <= created_date[to] will be returned
+f_with_archived	
+accepts 1/0 values. If 1 is passed, tasks from archived projects will be included to the response. If omitted or 0 is passed, only tasks from active projects are fetched.
+
+lists_status	
+Determines the status (i.e. active or archived) of Task Lists to fetch tasks from.  Accepts "active", "archived", "all" values. Omitting is equal to "active".
+(Note: "Task list" is the new name for "Task Group". The old name is still used in API and this wiki).
+
+Supported orders: 
+
+priority: tasks with no priority set are supposed to have the lowest priority.
+due_date: tasks with no due date set are always placed at the list end despite the order direction.
+
+WARN: if there are many orders in the request, only the first one will be applied.
+WARN: ordering is applied to Tasks groups for all orders except due_date. So if you have two tasks groups in output, there will be all tasks from the first group, and then all tasks from the second group in the output. For due_date order, Tasks groups order is ignored.
+WARN: when ordering, subtasks are always following their parent tasks if these tasks are present in the output.
+
+If not valid filter or order value is passed, this value is ignored.
+
+Example: /tasks?status[]=0&due_date[from]=2017-02-01&due_date[to]=2017-02-28&created_date[from]=2017-01-01&&assigned_to_id[]=13&assigned_to_id[]=-1&assigned_to_id[]=0&created_by_id[]=15&order[due_date]=asc&lists_status=active
+
+Output example for /tasks:GET:
+
+Output:
+
+tasks: list of tasks with the next fields:
+
+name	description
+id	task id
+assigned_to_id	user id task is assigned to. May have values -1 (ASSIGNED_EVERYONE) and 0 (ASSIGNED_NOONE).
+created_by_id	user id who created the task
+task_group_id	
+project_id	
+priority	possible values: 0 (none), 1 (low), 2 (medium), 3 (high).
+title	
+description	raw description, with Freedcamp tags like [fcattach]. WARN - you should show this data to the user when editing.
+description_processed	(absent if it's not a get one task by id) processed description, where [fcattach] tags are replaced with actual images with link. WARN - is present only when you request only one task, absent otherwise. You should show to user this data when showing task (and use raw "description" when editing).
+status	one of the next values: 0 (not started), 1 (completed), 2 (in progress)
+comments_count	
+files_count	files attached to the task (files attached to task comments are not counted)
+completed_ts	if was completed, ts when it happened, null otherwise
+start_ts	null if it was not set
+due_ts	null if it was not set
+created_ts	
+task_group_name	
+f_archived_list	false if the task is in an active task list, true if the task is in an archived task list
+priority_title	a title of the corresponding value in 'priority' field
+status_title	title of the corresponding value in 'status' field
+assigned_to_fullname	name of a user task is assigned to (will be discussed if we need it and in what format)
+can_delete	(absent if a query is for more than one project)
+can_edit 	(absent if a query is for more than one project)
+can_assign 	(absent if a query is for more than one project)
+can_progress 	(absent if a query is for more than one project)
+can_comment 	(absent if a query is for more than one project)
+comments 	(absent if it's not a get task by id) list of comments. Comments structure is described below
+files	(absent if it's not a get task by id) list of files attached to the task. See /files:GET for structure description
+url	URL for the task
+cf_tpl_id	custom fields template id (if linked with the task)
+custom_fields	(absent if custom fields are not requested) an array of custom fields values used for the task
+h_level	shows the task nesting level, 0 for top-level tasks.
+h_parent_id	shows the parent task id. Is an empty string for top-level tasks.
+h_top_id	shows the top parent task id (so is equal to h_parent_id for subtasks with h_level=1, and differs for subtasks with h_level > 1). Is an empty string for top-level tasks.
+r_rule	empty if the task is not recurring
+order	set by user order inside tasks group (using d&d). By default tasks in output are ordered by this field inside their tasks groups.
+WARN! It's possible that several tasks inside the same group have the same order value including default value (0).
+
+WARN! It's possible that subtask has order equal to or greater than its parent(s). In this case, API ignores the order of subtask and places subtask after parent task (if a parent is present in output).
+
+WARN! This field is NOT equal to the task position in the returned list.
+
+f_adv_subtask	(absent if it's not a get one task by id) shows if this is an advanced subtask or not. True for advanced subtasks, false for usual tasks and not advanced subtasks. Advanced subtasks have the same properties (all editable) that usual tasks. Not advanced subtasks have title and status only, and status can be set only in "TODO_NOT_STARTED" or "TODO_COMPLETED" (no "TODO_IN_PROGRESS" status).  Not advanced subtasks can't have comments as well. It's possible for a user to have access to both advanced and not advanced subtasks at the same time even inside the same project.
+Example:
+
+    "tasks": [
+      {
+        "id": "1528",
+        "h_parent_id": "1525",
+        "h_top_id": "1524",
+        "h_level": "2",
+        "f_adv_subtask": false, // only presents for getting a task by id
+        "assigned_to_id": null,
+        "created_by_id": "167",
+        "task_group_id": "272",
+        "project_id": "305",
+        "priority": 0,
+        "title": "tngfng",
+        "description": "<p>пат<br />\n </p>\n",
+        "status": 0,
+        "order": 3,
+        "comments_count": 0,
+        "files_count": 0,
+        "completed_ts": null,
+        "start_ts": null,
+        "due_ts": 1440745200,
+        "created_ts": 1440686274,
+        "task_group_name": "new",
+        "f_archived_list": false,
+        "priority_title": "none",
+        "status_title": "no progress",
+        "assigned_to_fullname": "Unassigned",
+        "r_rule": "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20200430T000000",
+        "can_delete": true,
+        "can_edit": true,
+        "can_assign": true,
+        "can_progress": true,
+        "can_comment": true,
+        "comments": [{...}, {...}, ...],
+        "files": [{...}, {...}, ...],
+        "url": "https://freedcamp.com/somename_LxR/project_Devel_yOf/todos/7666346/",
+        "cf_tpl_id": "15",
+        "custom_fields": [
+            {
+                "cf_id": "18",
+                "value": "211"
+            },
+            {
+                "cf_id": "19",
+                "value": "1"
+            }
+        ]
+      },
+      ....
+    ]
+Comments structure: the same as /comments:POST returns.
+
+If custom fields data is requested and there were custom fields templates linked to some tasks in the list, list of these templates will be returned in a separate array "cf_templates".
+Here is an example of its structure:
+
+"cf_templates": [
+    {
+        "id": "17",
+        "title": "all fields",
+        "fields": [
+            {
+                "id": "20",
+                "title": "drop very long name",
+                "type": "dropdown",
+                "f_required": false,
+                "order": 0,
+                "dd_options": [
+                    "the first option",
+                    "the second option",
+                ]
+            },
+            {
+                "id": "1",
+                "title": "text",
+                "type": "text_field",
+                "f_required": false,
+                "order": 1,
+                "dd_options": null
+            },
+            {
+                "id": "2",
+                "title": "area",
+                "type": "textarea",
+                "f_required": false,
+                "order": 2,
+                "dd_options": null
+            },
+            {
+                "id": "19",
+                "title": "check",
+                "type": "checkbox",
+                "f_required": false,
+                "order": 3,
+                "dd_options": null
+            },
+            {
+                "id": "18",
+                "title": "numn",
+                "type": "number",
+                "f_required": false,
+                "order": 4,
+                "dd_options": null
+            },
+            {
+                "id": "17",
+                "title": "date",
+                "type": "date",
+                "f_required": false,
+                "order": 5,
+                "dd_options": null
+            }
+        ]
+    }
+]
+dd_options array contains values for the dropdown type of custom field. For other field types, this field is set to null. Inside "custom_fields" array with values for the task, value for the field with dropdown type is the number of the value in the dd_options array (starting from 0). Also for dropdowns, there is an additional field dd_actual_value which contains the actual value (so you may know it without extracting it from dd_options by id).
+
+POST
+Input data: 
+
+name	description
+title	
+description 	can be an empty string
+project_id	
+task_group_id	can be empty or absent (task will be added to the first task list).
+priority 	priority id. See priorities for :get.
+assigned_to_id	should contain assigned to user id OR one of the two constants:  -1 (ASSIGNED_EVERYONE) and 0 (ASSIGNED_NOONE)
+start_date 	can be empty or absent, the format is YYYY-MM-DD (empty value will be used if start_date is not allowed for the plan. Old start_date will be overridden in this case, if any).
+r_rule	the recurrence rule in iCalendar (RFC 5545) format, can be an empty string or absent
+due_date 	can be empty or absent, the format is YYYY-MM-DD
+attached_ids 	an array of files uploaded previously with temporary=1 flag
+h_parent_id 	can be absent or empty. It contains a parent task id. Note: parent task should be in the same tasks group as passed task_group_id. WARN! if a project, where subtask is added to, does not allow advanced subtasks (i.e. has f_subtasks_adv = false, see above), added subtask should contain empty string for description and due_date fields, and "0" for priority and assigned_to_id fields. Also, the parent task should not be a subtask. In case when other values are passed, they will be implicitly fixed to the right values with triggering an error sent to Freedcamp developers. h_ stands for Hierarchy.
+Request example:
+
+{"title": "22222", "description": "wwwwwww", "project_id": "305", "task_group_id": "272", "priority": "1", "assigned_to_id": "1", "due_date": "2015-08-28", "r_rule": "RRULE:FREQ=DAILY;COUNT=5", "attached_ids": [1296, 1297]}
+Output: the same as /tasks/task_id:GET
+
+PUT
+(actual request should be /tasks/task_id:POST)
+
+WARN! If an edited task is a subtask (h_parent_id is not empty) and has f_adv_subtask = false, edited data should contain empty string for description and due_date fields, and "0" for priority and assigned_to_id fields, or these fields should be absent. Also, the parent task should not be a subtask. No limits if f_adv_subtask = true.
+
+Input data: 
+
+The same set as for /tasks:POST. You may pass only changed parameters as well and skip passing not changed.
+
+h_parent_id - can be absent or empty. If it is absent, the current parent id value is not changed during the query. If it is not empty and the edited task is not a subtask, it becomes a subtask. If is empty and edited task is a subtask, it becomes a task. All children tasks of the edited task are still its children in any case. Note: parent task should be in the same tasks group as passed task_group_id. 
+
+Request data example:
+
+{"title": "QQrgfbQQfdvQ!!!!", "description": "dvsdvdsfvdfv", "task_group_id": "276", "priority": "2", "assigned_to_id": "123", "due_date": "2015-08-13", "status": "2", "attached_ids": [1296, 1297]}
+Output: the same as /tasks/task_id:GET
+
+/tasks:POST(PUT) with custom fields manipulation
+With usual data passed when adding a task, you may pass additional fields:
+
+"cf_tpl_id": 1, "custom_fields": [{"cf_id": "1", "value": "1"}, {"cf_id": "2", "value": "some text"}]
+Custom fields data structure is described in /tasks:GET section above.
+
+Warn - do not pass 'cf_tpl_id' and 'custom_fields' if you do not intend to actually change anything in custom fields. Only passed custom fields values will be updated.
+
+Request data example to unlink custom field template from a task:
+
+/tasks/task_id:PUT
+
+{"cf_tpl_id": null}
+DELETE
+/tasks/task_id:DELETE
+
+/milestones
+GET
+/milestones- returns a list of all milestones user has access to
+
+/milestones?project_id=xxx - list of milestones in the project
+
+/milestones/milestone_id - list of milestones which contains only the milestone with given milestone_id 
+
+Limits
+
+All /milestones:GET requests support limit and offset parameters. Example: "/milestones?limit=2&offset=2". Current default (and maximum allowed) limit for public API is 200.
+
+All responses contain "meta" field:
+
+    "meta": {
+        "has_more": true, // always presents
+        "total_count": 1362 // presents if has_more = true
+    }
+name	description
+has_more	is true if there are more results after the last returned result in the response, and false otherwise.
+total_count	presents if show_more = true and contains all available results count.
+Example
+
+To fetch all the milestones, you need to execute a set of requests like
+
+https://freedcamp.com/api/v1/milestones?limit=200&offset=0
+https://freedcamp.com/api/v1/milestones?limit=200&offset=200
+https://freedcamp.com/api/v1/milestones?limit=200&offset=400
+....
+
+while there are results or meta.has_more is true.
+
+Filtration and order
+
+If you need more filters and orders please contact support.
+
+Output example for /milestones:GET:
+
+Output:
+
+milestones: list of milestones with the next fields:
+
+name	description
+id	milestone id
+project_id	
+title	
+description	raw description, with Freedcamp tags like [fcattach]. WARN - you should show this data to the user when editing.
+description_processed	(absent if it's not a get one milestone by id) processed description, where [fcattach] tags are replaced with actual images with link. WARN - is present only when you request only one milestone, absent otherwise. You should show to user this data when showing milestone (and use raw "description" when editing).
+assigned_to_id	user id milestone is assigned to. May have values -1 (ASSIGNED_EVERYONE) and 0 (ASSIGNED_NOONE).
+created_by_id	user id who created the milestone.
+created_ts	
+updated_ts	
+due_ts	
+start_ts	null if it was not set.
+status	One of the next values: 0 (not started), 1 (completed), 2 (in progress). See also 'priority_title' field and constants wiki.
+priority	possible values: 0 (none), 1 (low), 2 (medium), 3 (high).
+f_archived	false if the milestone is active, true if the milestone is archived.
+assigned_to_fullname	name of a user milestone is assigned to.
+order	set by user order (using d&d). By default milestones in output are ordered by this field.
+WARN! It's possible that several milestones inside the same group have the same order value including default value (0).
+
+WARN! This field is NOT equal to the milestone position in the returned list.
+
+comments_count	
+linked_items	(absent if it's not a get milestone by id) array of tasks milestone is linked to. Tasks structure is described above.
+comments 	(absent if it's not a get milestone by id) list of comments. Comments structure is described above.
+files	(absent if it's not a get milestone by id) files attached to the milestone (files attached to milestone comments are not counted).
+followers	(absent if it's not a get milestone by id) array of user ids subscribed to milestone.
+app_id	APP_MILESTONES (4)
+Example:
+
+        "milestones": [
+            {
+                "id": "318",
+                "project_id": "561",
+                "title": "[318] Milestone to test followers",
+                "description": "<p>qweqweqweqe</p>\n",
+                "description_processed": "<p>qweqweqweqe</p>\n",
+                "assigned_to_id": "281",
+                "created_by_id": "189",
+                "created_ts": 1614696522,
+                "updated_ts": 1617888076,
+                "due_ts": 1617138000,
+                "start_ts": 1614636000,
+                "status": 2,
+                "priority": 3,
+                "f_archived": false,
+                "assigned_to_fullname": "Kate I.",
+                "order": 0,
+                "comments_count": 1,
+                "linked_items": [{...}, {...}, ...],
+                "comments": [{...}, {...}, ...],
+                "files": [{...}, {...}, ...],
+                "followers": [
+                    "189",
+                    "202",
+                    "211",
+                    "283",
+                    "281",
+                    "157"
+                ],
+                "app_id": "4"
+            }
+        ]
+Comments structure: the same as /comments:POST returns.
+
+POST
+Input data: 
+
+name	description
+title	
+description 	can be an empty string
+project_id	
+priority 	priority id. See priorities for :GET.
+assigned_to_id	should contain assigned to user id OR one of the two constants:  -1 (ASSIGNED_EVERYONE) and 0 (ASSIGNED_NOONE)
+start_date 	can be empty or absent, the format is YYYY-MM-DD (empty value will be used if start_date is not allowed for the plan. Old start_date will be overridden in this case, if any).
+due_date 	the format is YYYY-MM-DD
+attached_ids 	an array of files uploaded previously with temporary=1 flag
+Request example:
+
+{"project_id":"561", "title":"ms title","description":"<p>descr...</p>\n","start_date":"2021-04-05","due_date":"2021-04-11","priority":1,"assigned_to_id":"-1","attached_ids":["2233"]}
+Output: the same as /milestones/milestone_id:GET
+
+PUT
+(actual request should be /milestones/milestone_id:POST)
+
+Input data: 
+
+The same set as for /milestones:POST. You may pass only changed parameters as well and skip passing not changed.
+
+Request data example:
+
+{"title":"ms title","description":"<p>descr...</p>\n","start_date":"2021-04-05","due_date":"2021-04-14","priority":2,"assigned_to_id":"157","status":0}
+Output: the same as /milestones/milestone_id:GET
+
+DELETE
+/milestones/milestone_id:DELETE
+
+/files
+GET
+/files/file_id - returns requested file inside files array
+
+Output:
+
+files: list of files with the following fields:
+
+name	description
+id	file id
+name	name of the file (as on user's PC when uploaded)
+url	download URL. Expires after some time, for example after 1 hour. It can be absent or empty. It always presents if requesting one file, or files array is a part of item data like task or comment.
+thumb_url	if f_image is true, it contains thumbnail URL, otherwise it is null.
+size	in bytes
+version_id	
+first_version_id	you may need it to upload a newer version of the file is_last_version project_id
+files_group_id	if a file is inside some files group, it's id, "0" otherwise
+file_type	file mime type
+app_id	application to which file belongs to
+item_id	item to which file attached to. Can be "0".
+comment_id	comment to which file attached to. Can be "0".
+user_id	a user who uploaded the file
+f_temporary	the file was uploaded for an item to be created (task, comment). You should pass file_id when submitting this item later to link it
+location	where the file is placed physically. Possible values are: storage, gdrive, onedrive, dropbox
+created_ts	
+f_image	if a file is image or not. Images may have thumb_url filed filled
+Example:
+
+"files": [
+      {
+        "id": "1293",
+        "name": "win.png",
+        "url": "https://freedcampfilestorage_test.s3.amazonaws.com/dsfv_JiP/win-89617.png?AWSAccessKeyId=AKIAJMBJBCR6Y7ZBMEEA&Expires=1441557155&Signature=smKZNFrjlfWdtffr0ie2WIqbJDo%3D",
+        "thumb_url": "https://freedcampfilestorage_test.s3.amazonaws.com/dsfv_JiP/win-89617_thumb.png?AWSAccessKeyId=AKIAJMBJBCR6Y7ZBMEEA&Expires=1441557155&Signature=0o3V5qojh2lCQofcvTN4K7%2FqGrk%3D",
+        "size": 74197,
+        "version_id": 1,
+        "first_version_id": 1293,
+        "is_last_version": true,
+        "project_id": "316",
+        "files_group_id": "0",
+        "comments_count": 0,
+        "file_type": "image/png",
+        "app_id": "2",
+        "item_id": "1549",
+        "comment_id": "0",
+        "user_id": "167",
+        "f_temporary": false,
+        "created_ts": 1441466810,
+        "f_image": true
+      },
+      ....
+ ]
+POST
+name	description
+application_id	should be always set
+project_id	
+item_id	can be empty or absent if added directly to Files application or a file is temporary, otherwise should present (even for comments)
+comment_id	can be empty or absent if it's not attaching a file to comment or file is temporary
+temporary	the file is uploaded for an item to be created (task, comment). You should pass returned file_id when submitting this item later to link it.
+file - additional form-encoded field (except JSON "data")
+
+Example:
+
+{"project_id": "309", "application_id": "2", "item_id": "1560", "comment_id": "514", "temporary":0}
+file: binary file data*
+
+* i. e. request body contains 2 fields, string "data" and file "avatar", encoded as a form-data
+
+Output: the same as /files/file_id:GET
+
+Note, that you should not attach files to items (tasks, comments etc) directly. So far it will cause wrong files_count counter for the item. It will be changed later.
+
+DELETE
+/files/file_id:DELETE
+
+/timezones
+GET
+/timezones - returns all available timezones. You should use one of the ids to update user's timezone trough /users/current:PUT.
+
+curr_offset field respects DST for a timezone.
+
+Output:
+
+see example:
+
+"timezones": [
+    {
+        "id": "Europe/Prague",
+        "title": "UTC+01:00 Prague, Warsaw",
+        "curr_offset": 120,
+        "curr_time": "20:11"
+    },
+    {
+        "id": "Europe/Athens",
+        "title": "UTC+02:00 Athens, Helsinki, Istanbul",
+        "curr_offset": 180,
+        "curr_time": "21:11"
+    },
+    ....
+]
+/comments
+POST
+Input data: 
+
+name	description
+item_id	Item id to add a comment for
+app_id	Application id (wiki). Supported apps are APP_TODOS, APP_FILES, APP_DISCUSSIONS, APP_BUGTRACKER, APP_WIKI, APP_CALENDAR.
+description	Text content, HTML is supported
+task_id	the deprecated parameter which will be removed
+attached_ids 	an array of files uploaded previously with temporary=1 flag. Can be empty or absent
+Example:
+
+    {"item_id": "1549","app_id": "2", "description": "wwwwwww", "attached_ids":[1307, 1297]}
+Output: 
+
+name	description
+id	
+description	raw description, with Freedcamp tags like. WARN - you should show this data to the user when editing.
+description_processed	processed description, where [fcattach] tags are replaced with actual images with a link. You should show to a user this data when showing comment (and use raw "description" when editing).
+created_by_id 	author id
+created_ts	
+likes_count	
+f_liked	if the comment is liked by the current user
+files	list of files attached to the comment. See /files:GET for structure description
+can_edit	boolean - if the current user is able to edit the comment
+f_unread	boolean - if the comment is unread. A comment is marked as read after fetching by API
+user_full_name	author name
+url	comment URL
+Note: for /comments:POST only just added comment will be returned.
+
+Example:
+
+    "comments": [
+          {
+            "id": "515",
+            "description": "<p>ghngfhnf<br />\n </p>",
+            "description_processed": "<p>ghngfhnf<br />\n </p>",
+            "created_by_id": "167",
+            "created_ts": 1441478547,
+            "likes_count": 2,
+            "f_liked": true,
+            "files": [{...}, {...}, ...],
+            "can_edit": false
+          },
+          ...
+    ]
+PUT
+(actual request should be /comments/comment_id:POST)
+
+Input data: 
+
+
+description - comment description. Can be empty or absent (equal to a comment containing an empty string). If you allow your users to edit comments you should be using description field not description_processed field. Field description_processed  should not be exposed for editing directly as it does not contain meta-information required which may get erased and lead to some data loss if PUT back.
+
+Example:
+
+    {"description": "sdkjcnsdcsdc sdc  sdckjs dn"}
+Output: 
+
+The same as for /comments:POST
+
+DELETE
+/comments/comment_id
+
+Deletes the comment.
+
+/issues
+GET
+/issues - returns a list of all issues user has access to
+
+/issues/?project_id=xxx - list of issues in the project
+
+/issues/issue_id - list of issues which contains only the issue with given issue_id
+
+Tags
+
+You may pass "f_include_tags=1" GET parameter, then the response will contain 'tags' array with tag ids assigned to the item.
+
+Limits
+
+All /issues:GET requests support limit and offset parameters. Example: "/issues?limit=2&offset=2". Current default (and maximum allowed) limit for public API is 200.
+
+All responses contain "meta" field:
+
+    "meta": {
+        "has_more": true, // always presents
+        "total_count": 1362 // presents if has_more = true
+    }
+name	description
+has_more	is true if there are more results than there were returned in the response, and false otherwise.
+total_count	presents if show_more = true and contains all available results.
+Filtration and order
+
+/issues and /issues/?project_id=xxx requests support filtration and ordering. Filters/order can be applied in any combination.
+
+Supported filters:
+
+name	description
+type	possible values are: "Bug", "Cosmetics", "Exception", "Feature", "Task", "Usability", "Performance", "Auto-Reported". For example, to get only Features, you should use:  "/issues?type[]=feature"
+priority	possible values are: 1, 2, 3. For example, to get only high priority issues, you should use:  "/issues?priority[]=3"
+status	possible values are: 0, 1, 2, 3, 4 ("Open", "Completed", "InProgress", "Invalid", "Review"). For example, to get only open and invalid issues, you should use:  "/issues?status[]=0&status[]=3"
+assigned_to_id	accepts integer values containing user id or one of Assignments constants from constants wiki
+due_date[to]	accepts a date in format YYYY-MM-DD. If set, only issues with the due date set and due date <= due_date[to] will be returned
+due_date[from]	accepts a date in format YYYY-MM-DD. If set, only issues with the due date set and due date >= due_date[from] will be returned
+Supported orders: 
+
+due_date: issues with no due date set are always placed at the list end despite the order direction.
+
+WARN: if there are many orders in the request, only the first one will be applied.
+
+If not valid filter or order value is passed, this value is ignored and the throttle penalty may be applied.
+
+Example: /issues?type[]=feature&priority[]=3&status[]=0&due_date[from]=2018-09-01&due_date[to]=2018-09-28&assigned_to_id[]=13&assigned_to_id[]=-1&assigned_to_id[]=0&order[due_date]=asc
+
+Output example for /issues:GET:
+
+Output:
+
+issues: list of issues with the next fields:
+
+name	description
+id	issue id
+project_id	
+title	
+number_prefixed	auto-generated number of the issue with project prefix, like "COP-1001"
+description	raw description, with Freedcamp tags
+description_processed	(absent if it's not a get one issue by id) processed description, where [fcattach] tags are replaced with actual images with a link. WARN - is present only when you request only one issue, absent otherwise. You should show to a user this data when showing the issue (and use raw "description" when editing).
+created_by_id	user id who created the issue
+assigned_by_email	If an issue is created using a public widget, contains the email used in it
+assigned_to_id	user id issue is assigned to. May have value 0 (ASSIGNED_NOONE).
+comments_count	
+order	set by user order
+WARN! It's possible that several issues have the same order value including default value (0).
+
+WARN! This field is NOT equal to the issue position in the returned list.
+
+status	possible values: 0 (Open), 1 (Completed), 2 (InProgress), 3 (Invalid), 4 (Review). See also 'status_title' field and constants wiki
+priority	possible values: 1 (low), 2 (medium), 3 (high). See also 'priority_title' field and constants wiki
+type	possible values: "Bug", "Cosmetics", "Exception", "Feature", "Task", "Usability", "Performance", "Auto-Reported"
+created_ts	
+closed_by_id	user_id of the user who closed the issue
+closer_id	user_id of the user who will close the issue
+completed_ts	if was completed, ts when it happened, null otherwise
+due_ts	null if was not set
+status_title	
+priority_title	
+assigned_to_fullname	name of the user the issue is assigned to
+created_by_fullname	name of the user who created the issue
+comments 	(absent if it's not a get issue by id) list of comments. Comments structure: the same as /comments:POST returns.
+files	(absent if it's not a get issue by id) list of files attached to the issue. See /files:GET for structure description
+app_id	APP_BUGTRACKER (13)
+Example:
+
+    "issues": [
+            {
+                "id": "147",
+                "project_id": "561",
+                "title": "By API",
+                "number_prefixed": "REC-1013",
+                "description": "by api",
+                "description_processed": "by api",
+                "created_by_id": "189",
+                "assigned_by_email": "",
+                "assigned_to_id": "189",
+                "comments_count": 0,
+                "order": 0,
+                "status": 3,
+                "priority": 2,
+                "type": "Bug",
+                "created_ts": 1555933097,
+                "closed_by_id": "189",
+                "closer_id": "189",
+                "completed_ts": null,
+                "due_ts": 1440712800,
+                "status_title": "Invalid",
+                "priority_title": "Medium",
+                "assigned_to_fullname": "Kateryna Iakubovska",
+                "created_by_fullname": "Kateryna Iakubovska",
+                "comments": {},
+                "files": {},
+                "app_id": "13"
+            },
+      ...
+    ]
+POST
+Input data: 
+
+name	description
+title	
+description	can be an empty string
+project_id	
+priority	possible values: 1 (low), 2 (medium), 3 (high). See also 'priority_title' field and constants wiki
+status	possible values: 0 (Open), 1 (Completed), 2 (InProgress), 3 (Invalid), 4 (Review). See also 'status_title' field and constants wiki
+type	possible values: "Bug", "Cosmetics", "Exception", "Feature", "Task", "Usability", "Performance", "Auto-Reported"
+assigned_to_id	user id issue is assigned to. May have value 0 (ASSIGNED_NOONE).
+due_date	can be empty or absent, the format is YYYY-MM-DD
+closer_id	user_id of the user who will close the issue
+attached_ids	an array of files uploaded previously with temporary=1 flag
+Request example:
+
+{"title": "New issue", "description": "by api", "project_id": "561", "priority": 2, "status": 0, "type": "Bug", "assigned_to_id": "189", "due_date": "2019-05-01", "closer_id": "189", "attached_ids":[1296, 1297]} 
+Output: the same as /issues/issue_id:GET
+
+PUT
+(actual request should be /issues/issue_id:POST)
+
+Input data: 
+
+The same set as for /issues:POST. You may pass only changed parameters as well and skip passing not changed.
+
+Request data example:
+
+{"title": "Edited issue", "description": "by api (edited)", "project_id": "561", "priority": 1, "status": 3, "type": "Bug", "assigned_to_id": "189", "due_date": "2019-04-25", "closer_id": "189", "attached_ids":[1296, 1297]}
+Output: the same as /issues/issue_id:GET
+
+DELETE
+/issues/issue_id:DELETE
+
+/times
+GET
+/times - returns a list of all time records user has access to
+
+/times?project_id=xxx - returns a list of time records in the project
+
+/times/time_id - returns a list of time records which contains only the event with given event_id
+
+Limits
+
+All /times:GET requests support limit and offset parameters. Example: "/times?limit=2&offset=2". Current default (and maximum allowed) limit for public API is 200.
+
+All responses contain "meta" field:
+
+    "meta": {
+        "has_more": true, // always presents
+        "total_count": 1362 // presents if has_more = true
+    }
+name	description
+has_more	is true if there are more results after the last returned result in the response, and false otherwise.
+total_count	presents if show_more = true and contains all available results count.
+Filtration and order
+
+/times and /times?project_id=xxx requests support filtration and ordering. Filters/order can be applied in any combination.
+
+Supported filters:
+
+name	description
+assigned_to_id	accepts integer values containing user id or one of Assignments constants from constants wiki.
+date[from]	accepts a date in format YYYY-MM-DD. If set, only time records with the date set date >= due_date[from] will be returned.
+date[to]	accepts a date in format YYYY-MM-DD. If set, only time records with the date set and <= due_date[to] will be returned.
+Supported orders: 
+
+date - orders by the time record date
+
+WARN: if there are many orders in the request, only the first one will be applied.
+
+If not valid filter or order value is passed, this value is ignored.
+
+Example: /times?date[from]=2018-03-01&date[to]=2018-04-01&assigned_to_id[]=13&assigned_to_id[]=-1&order[date]=asc
+
+Output
+
+name	description
+id	
+project_id	
+created_by_id 	user id who created the record
+assigned_to_id 	user id who is linked to the record
+description 	description
+date_ts 	selected date
+status	one of the next values: 0 (not started), 1 (completed), 2 (in progress)
+minutes_count 	how many minutes was worked
+created_ts 	when the time record was created
+started_ts 	if time record is started (i.e. timer is running), contains start timestamp. The current timer value is automatically added to the minutes_count field.
+app_id	APP_TIME (5)
+Example:
+
+"times": [
+    {
+        "id": "79",
+        "project_id": "547",
+        "created_by_id": "167",
+        "assigned_to_id": "-1",
+        "description": "4",
+        "date_ts": 1521244800,
+        "status": 0,
+        "minutes_count": 1,
+        "created_ts": 1521174531,
+        "started_ts": null
+    },
+    {
+        "id": "81",
+        "project_id": "547",
+        "created_by_id": "167",
+        "assigned_to_id": "167",
+        "description": "assigned me",
+        "date_ts": 1522195200,
+        "status": 1,
+        "minutes_count": 15,
+        "created_ts": 1522131399,
+        "started_ts": null
+    },
+    {
+        "id": "83",
+        "project_id": "547",
+        "created_by_id": "167",
+        "assigned_to_id": "-1",
+        "description": "assigned everyone",
+        "date_ts": 1522368000,
+        "status": 2,
+        "minutes_count": 0,
+        "created_ts": 1522131439,
+        "started_ts": null
+    }
+]
+POST
+Input data: 
+
+name	description
+description	
+project_id	
+assigned_to_id	should contain assigned to user id OR constant: -1 (ASSIGNED_EVERYONE)
+date	selected date, required, format is YYYY-MM-DD
+minutes_count	how many minutes was worked
+status	one of the next values: 0 (not started), 1 (completed), 2 (in progress)
+Request example:
+
+{"project_id": "561", "description": "New time record", "assigned_to_id": "189", "date": "2019-04-19", "minutes_count": 20, "status":1} 
+Time record can be linked to a task, 'link_item_id' (task id to link) and 'link_app_id' ('2' for Tasks application) fields should be added to POST data for this.
+
+Example:
+
+{"project_id": "561", "description": "New time record linked to a task", "assigned_to_id": "189", "date": "2019-04-19", "minutes_count": 20, "status":1,"link_app_id":"2","link_item_id":"33008"}
+Output: the same as /times/time_id:GET
+
+PUT
+(actual request should be /times/time_id:POST)
+
+API supports property editing or actions. If there is a non-empty action field in POST, we handle action command execution, else - process property changes.
+
+Input data (property editing): 
+
+The same set as for /times:POST, except f_started, f_billed and project_id. You may pass only changed parameters as well and skip passing not changed.
+
+Request data example:
+
+{"description": "Edited time record", "assigned_to_id": "-1", "date": "2019-04-20", "minutes_count": "0"}
+Output: the same as /times/time_id:GET
+
+Input data (actions): 
+
+Possible actions
+
+name	description
+start	starts time tracking for a time record. UI action: 'Start working'
+stop	stops time tracking for a time record. Value from a timer is adding to a time record time value. UI action: 'Stop working'
+bill	makes a time record billed, billed time record cannot be started and stopped. UI action: 'Mark as Completed'
+unbill	returns a time record to progress, start and stop become available. User interface action is 'Back in Progress'
+Request data example:
+
+{"action": "stop"}
+Output: the same as /times/time_id:GET
+
+DELETE
+
+/times/time_id:DELETE
+
+/calendar_items
+GET
+/calendar_items - returns a list of all calendar items user has access to (grouped by applications)
+
+/calendar_items?project_id=xxx - returns a list of calendar items in the project (grouped by applications)
+
+Output structure example:
+
+{
+    "http_code": 200,
+    "msg": "OK",
+    "error_id": 0,
+    "data": {
+        "tasks": [{...}, ... {...}],
+        "milestones": [{...}, ... {...}],
+        "issues": [{...}, ... {...}],
+        "events": [{...}, ... {...}],
+        "crm_calls": [{...}, ... {...}],
+        "crm_tasks": [{...}, ... {...}]
+    }
+}
+/events
+GET
+/events - returns a list of all calendar events user has access to
+
+/events?project_id=xxx - returns a list of calendar events in the project
+
+/events/event_id - returns a list of events that contains only the event with given event_id
+
+The default period for returned events data is the current month (Dec 1 - Dec 31 if today is Dec, 8th). To modify this period you can use parameters 'from_ts' and 'to_ts' (UNIX timestamp). You can pass one or both at the same time.
+
+Examples:
+
+/events?from_ts=1639574817&to_ts=1643673600
+/events?project_id=xxx&to_ts=1643673600
+
+Limits
+
+All /events:GET requests support limit and offset parameters. Example: "/events?limit=2&offset=2".
+
+Output:
+
+events: list of calendar events with the next fields:
+
+name	description
+id	event id
+project_id	
+title	
+description	
+created_by_id	user id who created the task
+due_ts	timestamp, an alias for end_ts 
+start_ts	timestamp, start date and time
+end_ts	timestamp, end date and time
+root_start_ts	timestamp, start date and time of the first occurrence if the event is recurring or an alias for start_ts if the event is not recurring
+root_end_ts	timestamp, end date and time of the first occurrence if the event is recurring or an alias for start_ts if the event is not recurring
+duration	in minutes
+f_all_day	true if the event has start and end time or false if the event is all day long
+r_rule	empty if the event is not recurring
+url	URL for the event
+app_id	APP_CALENDAR (19)
+Example:
+
+        "events": [
+            {
+                "id": "1301",
+                "project_id": "561",
+                "title": "last day of the month",
+                "description": "",
+                "created_by_id": "189",
+                "due_ts": 1553983200,
+                "date_start": 1553983200,
+                "date_end": 1553983200,
+                "duration": 120,
+                "f_all_day": false,
+                "r_rule": "RRULE:FREQ=MONTHLY;BYMONTHDAY=-1;UNTIL=20200101T000000",
+                "url": "/Calendar_Events_Grou_Cm9/Recurring_Tasks_kpi/calendar/1301",
+                "app_id": "19"
+            },
+            {
+                "id": "1303",
+                "project_id": "561",
+                "title": "31",
+                "description": "",
+                "created_by_id": "189",
+                "due_ts": 1553983200,
+                "date_start": 1553983200,
+                "date_end": 1553983200,
+                "duration": 1440,
+                "f_all_day": true,
+                "r_rule": "RRULE:FREQ=MONTHLY;BYMONTHDAY=31;UNTIL=20200101T000000",
+                "url": "/Calendar_Events_Grou_Cm9/Recurring_Tasks_kpi/calendar/1303",
+                "app_id": "19"
+            },
+        ]
+POST
+Input data: 
+
+name	description
+title	
+description 	can be an empty string
+project_id	
+f_all_day	empty if a new event has a start and end time, 1 - if a new event is all day long
+date_start	required, the format is YYYY-MM-DD, must be earlier or equal to the date_end
+time_start	required if f_all_day is empty, final start date and time must be earlier or equal to the final end date and time
+date_end 	required, the format is YYYY-MM-DD
+time_end	required if f_all_day is empty, final start date and time must be earlier or equal to the final end date and time
+r_rule 	the recurrence rule in iCalendar (RFC 5545) format. Empty if the event is not repeating.
+attached_ids 	an array of files uploaded previously with temporary=1 flag
+mixed_users 	an array of invited user ids or/and emails of not registered users
+Request example:
+
+{"project_id": "561","title":"new recurring event","description":"event example","f_all_day":true,"date_start":"2019-04-01","time_start":"14:00:00","date_end":"2019-04-01","time_end":"14:30:00","r_rule":"RRULE:FREQ=DAILY;COUNT=5","attached_ids":[1296, 1297],"mixed_users":["189","katya+tt@freedcamp.com","425"]}
+Output: the same as /events/event_id:GET
+
+PUT
+(actual request should be /events/event_id:POST)
+
+Input data: 
+
+The same set as for /events:POST. You may pass only changed parameters as well and skip passing not changed.
+
+Request data example:
+
+{"title":"edited recurring event","description":"event example","f_all_day":false,"date_start":"2019-04-01","time_start":"14:00:00","date_end":"2019-04-01","time_end":"14:30:00","r_rule":"RRULE:FREQ=DAILY;COUNT=5","attached_ids":""}
+Output: the same as /events/event_id:GET
+
+DELETE
+/events/event_id:DELETE
+
+/lists
+Supported applications are: Tasks, Wiki, Discussions, Passwords, Files.
+
+GET
+GET /lists/app_id?project_id=xxx - returns all active lists for a given application in the project.
+
+GET /lists/app_id - returns all active lists for a given application in all projects, ordered by Project Group order ASC, Project order ASC, List order ASC. Is supported only for Tasks.
+
+app_id stands for the integer application id (check the constants wiki). Supported apps are APP_TODOS, APP_FILES, APP_DISCUSSIONS, APP_WIKI, APP_PASSMAN.
+
+Output:
+
+lists: array of requested lists with the next fields
+
+name	description
+id	list id
+title	
+description	
+order	order of the list inside the project, starting from 0
+project_id	
+app_id	Application id (wiki). Supported apps are APP_TODOS, APP_FILES, APP_DISCUSSIONS, APP_WIKI, APP_PASSMAN.
+Example: 
+
+        "lists": [
+            {
+                "id": "1409",
+                "name": "tasks for archived ms",
+                "title": "tasks for archived ms",
+                "description": "",
+                "order": 0,
+                "project_id": "561",
+                "app_id": "2"
+            },
+            {
+                "id": "1408",
+                "name": "subtasks",
+                "title": "subtasks",
+                "description": "",
+                "order": 1,
+                "project_id": "561",
+                "app_id": "2"
+            }
+        ]
+POST
+Input data: 
+
+name	description
+title	required
+description	can be an empty or omitted
+project_id	required
+h_parent_id	only for APP_FILES, used in folders hierarchy. If passed and value is greater than 0 - new subfolder will be created for folder_id = h_parent_id
+Request example:
+
+POST /lists/2  // Tasks
+
+data: {"project_id": "561", "title": "List by API", "description": "by api"}
+POST /lists/6  // Files
+
+data: {"project_id": "561", "title": "List by API", "h_parent_id": 14}
+Output: the same as /lists/app_id:GET but 'lists' array contains the just created list only.
+
+PUT
+(actual request should be /list/app_id/list_id:POST)
+
+Input data: 
+
+The same set as for /lists:POST except the project_id. You may pass only changed parameters and skip passing not changed.
+
+Request data example:
+
+data: {"title": "List by API", "description": "by api"}
+Output: the same as /lists/app_id:GET but 'lists' array contains the just updated list only.
+
+DELETE
+WARN: Not allowed publicly for now
+
+DELETE /lists/app_id/list_id
+
+Deletes the list.
+
+/favorite_projects
+POST
+/favorite_projects/project_id
+
+Sets a project as a favorite.
+
+DELETE
+/favorite_projects/project_id
+
+Sets a project as not favorite.
+
+/backups
+GET
+/backups returns all existing backups.
+
+Limits
+
+/backups:GET request supports limit and offset parameters. Example: "/backups?limit=2&offset=2". Current default (and maximum allowed) limit for public API is 200. Backups are ordered by date created DESC, so the most recent backups are on top. It's recommended to use reasonable limit to get only last backups, like limit=20.
+
+All responses contain "meta" field:
+
+    "meta": {
+        "has_more": true, // always presents
+        "total_count": 120 // presents if has_more = true
+    }
+has_more is true if there are more results than were returned in the response, and false otherwise.
+total_count presents if show_more = true and contains all available results count.
+
+Output
+
+name	description
+id	
+date_human	
+url	Authorized S3 URL, expires in 24 hours
+Example:
+
+"backups": [
+    {
+        "id": "23422",
+        "date_human": "Oct 2, 2018",
+        "url": "https://s3.amazonaws.com/backup_2342222_2018-10-02_0102.zip?AWSAccessKeyId=JNKJCDNSSDCDCSD&Expires=12143242432&Signature=qqT%2Bey2zW%2B0%2tOC6J2W8i1bN%2BpmI%3D"
+    },
+    ...
+    {
+        "id": "23410",
+        "date_human": "Jul 1, 2018",
+        "url": "https://s3.amazonaws.com/backup_2342342_2018-07-01_0102.zip?AWSAccessKeyId=JNKJCDNSSDCDCSD&Expires=12143242432&Signature=qqT%2Bey2zW%2B0%2tOC6J2W8i1bN%2BpmI%3D"
+    }
+]
+Calculating hash for a secured API key
+Validation tool
+Simple&rude html page where you can check if your hash is properly calculated (opens in a new tab).
+
+Javascript
+var secret = 'your secret API key';
+var public_key = 'your secured public api key';
+var ts = new Date().valueOf();
+var hash = CryptoJS.HmacSHA1(public_key + ts, secret);
+var hash_string = hash.toString(); // send this to API
+C#
+The code below is kindly provided by Freedcamp user H. Gokhan Mamaci:
+
+private static readonly Encoding encoding = Encoding.UTF8;
+void Main()
+{
+   var key_public = "your secured public api key";
+   var key_private = "your secret API key";
+   var ts = UnixTimeStampTotalSeconds();
+   var keyByte = encoding.GetBytes(key_private);
+
+   using (var hmacsha1 = new HMACSHA1(keyByte))
+   {
+         hmacsha1.ComputeHash(encoding.GetBytes(string.Concat(key_public, ts)));
+         var hashstr = ByteToString(hmacsha1.Hash);
+         $"https://freedcamp.com/api/v1/sessions/current?api_key={key_public}&timestamp={ts}&hash={hashstr}".Dump();
+   }
+}
+
+static string ByteToString(byte[] buff)
+{
+   string sbinary = "";
+   for (int i = 0; i < buff.Length; i++)
+       sbinary += buff[i].ToString("x2");
+   return sbinary;
+}
+
+static string UnixTimeStampTotalSeconds()
+{
+   DateTime nx = new DateTime(1970, 1, 1); // UNIX epoch date
+   TimeSpan ts = DateTime.UtcNow - nx;
+   return ((long)ts.TotalSeconds).ToString();
+}
+Setting up Postman
+Postman will allow you to easily check and test all the available methods. Note that not all methods in the collection are currently allowed for access through public API (like /wipe).
+To get requests working for the example collection, you need to define 'xapikey' variable in the current Postman environment with the value of your api_key. No need to define cookie and xapitoken variables so far.
+For a simple start you may use not-secured api_key - it does not require calculating hash.
+
+If you want to use API key secured with API secret, you should define a pre-request script which will calculate hash based on the current time. You should end up having set up like shown below.
+
+Url
+
+{{apihost}}/api/v1/tasks?api_key={{public_api_key}}&timestamp={{timestamp}}&hash={{hash}}&limit=5&offset=0
+Pre-request script
+
+var public_api_key = "your api key";
+var secret_key = "your api secret";
+var timestamp = Math.floor(new Date().valueOf()/1000);
+
+var hash = CryptoJS.HmacSHA1(public_api_key + timestamp, secret_key);
+
+// lines below will be a bit different for the standalone version - you'll use pm.environment.set("public_api_key", public_api_key);
+postman.setEnvironmentVariable("public_api_key", public_api_key);
+postman.setEnvironmentVariable("timestamp", timestamp);
+postman.setEnvironmentVariable("hash", hash.toString());
+Examples
+Attaching files to tasks
+There are two possible ways to attach a file to a task: 
+
+1) Create a task. Now upload a file with "temporary=0" field and with proper values for project_id, app_id ('2' for Tasks) and item_id (i.e. task id).
+
+curl -X POST \
+  http://freedcamp.bear.com/api/v1/files?api_key=your_api_key \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -H 'cache-control: no-cache' \
+  -H 'content-type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW' \
+  -F 'data={"project_id": "632", "application_id": "2", "item_id": "323", "comment_id": "", "temporary":0}' \
+  -F 'file=@C:\file.txt'
+2) Upload file(s) with "temporary=1" field and remember their id (returned in the response). You also need to set application_id and project_id.
+
+curl -X POST \
+  http://freedcamp.bear.com/api/v1/files?api_key=your_api_key \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -H 'cache-control: no-cache' \
+  -H 'content-type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW' \
+  -F 'data={"project_id": "632", "application_id": "2", "item_id": "", "comment_id": "", "temporary":1}' \
+  -F 'file=@C:\file.txt'
+Returned file id = 1748. Now post a task, passing these id(s) in attached_ids field:
+
+curl -X POST \
+  http://freedcamp.bear.com/api/v1/tasks?api_key=your_api_key \
+  -H 'cache-control: no-cache' \
+  -H 'content-type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW' \
+  -F 'data={"title": "33333", "description": "wwwwwww", "project_id": "632", "task_group_id": "2599259", "task_group_name": "","task_group_description": "", "priority": "1", "assigned_to_id": "167", "due_date": "2015-08-28", "attached_ids":[1748]}'
+Questions and bug reports
+Please send your questions and bug reports to help@freedcamp.com
+
+Feature requests
+Please post your feature requests on Freedcamp's UserVoice portal. 
+
+
+Version: 58
+Updated on: Sep 11, 2024

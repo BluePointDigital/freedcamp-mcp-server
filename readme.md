@@ -52,7 +52,7 @@ A comprehensive **Model Context Protocol (MCP) server** for seamless integration
 
 1. **Clone the repository:**
 ```bash
-git clone https://github.com/yourusername/freedcamp-mcp-server.git
+git clone https://github.com/BluePointDigital/freedcamp-mcp-server.git
 cd freedcamp-mcp-server
 ```
 
@@ -90,6 +90,17 @@ The included `docker-compose.yml` provides:
 - **Restart policies** for reliability
 - **Resource limits** for optimal performance
 - **Network isolation** for security
+
+## 🔥 Workflow Instructions for LLMs
+
+**IMPORTANT**: This MCP server includes comprehensive workflow guidance to ensure proper usage:
+
+1. **Server Description**: Built-in instructions provided when LLMs first connect
+2. **`get_workflow_help()` Tool**: Contextual workflow guidance for specific operations
+3. **Enhanced Tool Docstrings**: Workflow reminders in critical tools like `create_task()` 
+4. **Workflow Documentation**: See `freedcamp-workflow-instructions.md` for detailed guidance
+
+**Key Rule**: Always call `get_projects()` and `get_users()` first to look up IDs before using them in operations!
 
 ## 📚 API Reference
 

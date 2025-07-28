@@ -155,7 +155,14 @@ class FreedcampMCP:
         
         # Get project name from cache or use "Unknown Project"
         project_id = task.get("project_id")
-        project_name = self._project_cache.get(project_id, "Unknown Project") if project_id else "Unknown Project"
+        if project_id:
+            # Try both string and int versions
+            project_name = (self._project_cache.get(str(project_id)) or 
+                          self._project_cache.get(int(project_id) if isinstance(project_id, str) and project_id.isdigit() else project_id) or 
+                          "Unknown Project")
+        else:
+            project_name = "Unknown Project"
+        print(f"DEBUG: Looking up project_id {project_id} (type: {type(project_id)}) -> found: {project_name} (cache has {len(self._project_cache)} entries)")
         
         return {
             "id": task["id"],
@@ -184,8 +191,16 @@ class FreedcampMCP:
         if not self._project_cache:  # Only fetch if cache is empty
             try:
                 projects = await self.get_all_projects()
+                print(f"DEBUG: Found {len(projects)} projects")
                 for project in projects:
-                    self._project_cache[project.get("id")] = project.get("name", "Unknown Project")
+                    project_id = project.get("id")
+                    project_name = project.get("name", "Unknown Project")
+                    # Store both string and int versions to handle type mismatches
+                    self._project_cache[str(project_id)] = project_name
+                    self._project_cache[int(project_id) if isinstance(project_id, str) and project_id.isdigit() else project_id] = project_name
+                    print(f"DEBUG: Cached project {project_id} (type: {type(project_id)}) -> {project_name}")
+                print(f"DEBUG: Project cache now has {len(self._project_cache)} entries")
+                print(f"DEBUG: Cache keys: {list(self._project_cache.keys())}")
             except Exception as e:
                 print(f"Warning: Could not populate project cache: {e}")
                 # Continue without cache - will show "Unknown Project"
@@ -208,11 +223,12 @@ class FreedcampMCP:
             
             if response["data"].get("projects"):
                 for project in response["data"]["projects"]:
+                    print(f"DEBUG: Raw project data: {project}")
                     group_name = project.get("group_name", "Ungrouped")
                     
                     simplified_project = {
-                        "id": project["id"],
-                        "name": project["project_name"],
+                        "id": project.get("project_id", project.get("id")),
+                        "name": project.get("project_name", project.get("name")),
                         "description": project.get("project_description", ""),
                         "color": project.get("project_color", ""),
                         "group_name": group_name,
