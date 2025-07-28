@@ -41,7 +41,7 @@ class FreedcampMCP:
         # Create FastMCP server
         self.mcp = FastMCP(
             name="freedcamp-mcp",
-            instructions="Freedcamp API server. CRITICAL: Always use filtering parameters (due_date_to, status_filter, etc.) instead of getting all data. Workflow: get_projects() → get_task_lists() → get_users() to lookup IDs before creating tasks."
+            instructions="Freedcamp API server. CRITICAL: Always use filtering parameters (due_date_to, status_filter, etc.) instead of getting all data. Workflow: get_projects() → get_task_lists() → get_users() to lookup IDs before creating tasks. IMPORTANT: When displaying results to users, always use project_name instead of project_id for better readability (e.g., 'Project: Marketing Campaign' not 'Project: 3276489')."
         )
         self._setup_tools()
     
@@ -152,16 +152,6 @@ class FreedcampMCP:
         # Convert due_ts (timestamp) to readable date format
         due_date = self._format_date(task.get("due_ts", 0)) or None
         
-        # TEMPORARY DEBUG: Let's see what date fields are actually in the response
-        debug_info = {
-            "due_ts": task.get("due_ts"),
-            "due_date": task.get("due_date"), 
-            "start_ts": task.get("start_ts"),
-            "start_date": task.get("start_date"),
-            "created_ts": task.get("created_ts"),
-            "all_keys": list(task.keys())
-        }
-        
         result = {
             "id": task["id"],
             "title": task["title"],
@@ -170,9 +160,9 @@ class FreedcampMCP:
             "assigned_to_fullname": task.get("assigned_to_fullname", "Unassigned"),
             "due_date": due_date,
             "project_id": task.get("project_id"),
+            "project_name": task.get("project_name", "Unknown Project"),
             "task_group_name": task.get("task_group_name"),
-            "url": task.get("url", ""),
-            "_debug_info": debug_info  # TEMPORARY: Remove this after debugging
+            "url": task.get("url", "")
         }
         
         return result
@@ -1370,7 +1360,7 @@ class FreedcampMCP:
             include_custom_fields: bool = False,
             include_details: bool = False
         ) -> str:
-            """Get user tasks with date filtering. ALWAYS use due_date_to='YYYY-MM-DD' to filter instead of getting all tasks. Returns minimal fields by default - only use include_details=True if you need full task descriptions."""
+            """Get user tasks with date filtering. ALWAYS use due_date_to='YYYY-MM-DD' to filter instead of getting all tasks. Returns minimal fields by default including project_name for readable display. Only use include_details=True if you need full task descriptions."""
             try:
                 result = await self.get_user_tasks(
                     user_id=user_id, include_completed=include_completed,
