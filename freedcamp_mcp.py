@@ -37,12 +37,11 @@ class FreedcampMCP:
     def __init__(self, config: FreedcampConfig):
         self.config = config
         self.client = httpx.AsyncClient()
-        self._project_cache = {}  # Cache project names by ID
         
         # Create FastMCP server
         self.mcp = FastMCP(
             name="freedcamp-mcp",
-            instructions="Freedcamp API server. CRITICAL: Always use filtering parameters (due_date_to, status_filter, etc.) instead of getting all data. Workflow: get_projects() → get_task_lists() → get_users() to lookup IDs before creating tasks. IMPORTANT: When displaying results to users, always use project_name instead of project_id for better readability (e.g., 'Project: Marketing Campaign' not 'Project: 3276489')."
+            instructions="Freedcamp API server. CRITICAL: Always use filtering parameters (due_date_to, status_filter, etc.) instead of getting all data. Workflow: get_projects() → get_task_lists() → get_users() to lookup IDs before creating tasks. IMPORTANT: When displaying results to users, always use project_name instead of project_id for better readability (e.g., 'Project: Marketing Campaign' not 'Project: 3276489'). NOTE: Only use 'include_details: true' when the default return doesn't give enough data for your specific need."
         )
         self._setup_tools()
     
@@ -153,17 +152,6 @@ class FreedcampMCP:
         # Handle both date formats: API docs say due_ts (timestamp) but actual API returns due_date (string)
         due_date = task.get("due_date") or self._format_date(task.get("due_ts", 0)) or None
         
-        # Get project name from cache or use "Unknown Project"
-        project_id = task.get("project_id")
-        if project_id:
-            # Try both string and int versions
-            project_name = (self._project_cache.get(str(project_id)) or 
-                          self._project_cache.get(int(project_id) if isinstance(project_id, str) and project_id.isdigit() else project_id) or 
-                          "Unknown Project")
-        else:
-            project_name = "Unknown Project"
-        print(f"DEBUG: Looking up project_id {project_id} (type: {type(project_id)}) -> found: {project_name} (cache has {len(self._project_cache)} entries)")
-        
         return {
             "id": task["id"],
             "title": task["title"],
@@ -171,8 +159,8 @@ class FreedcampMCP:
             "priority_title": task.get("priority_title", "None"),
             "assigned_to_fullname": task.get("assigned_to_fullname", "Unassigned"),
             "due_date": due_date,
-            "project_id": project_id,
-            "project_name": project_name,
+            "project_id": task.get("project_id"),
+            "project_name": task.get("project_name", "Unknown Project"),
             "task_group_name": task.get("task_group_name"),
             "url": task.get("url", "")
         }
@@ -185,25 +173,7 @@ class FreedcampMCP:
         }
 
     # ====== PROJECT MANAGEMENT ======
-    
-    async def _populate_project_cache(self) -> None:
-        """Populate the project cache with all project names"""
-        if not self._project_cache:  # Only fetch if cache is empty
-            try:
-                projects = await self.get_all_projects()
-                print(f"DEBUG: Found {len(projects)} projects")
-                for project in projects:
-                    project_id = project.get("id")
-                    project_name = project.get("name", "Unknown Project")
-                    # Store both string and int versions to handle type mismatches
-                    self._project_cache[str(project_id)] = project_name
-                    self._project_cache[int(project_id) if isinstance(project_id, str) and project_id.isdigit() else project_id] = project_name
-                    print(f"DEBUG: Cached project {project_id} (type: {type(project_id)}) -> {project_name}")
-                print(f"DEBUG: Project cache now has {len(self._project_cache)} entries")
-                print(f"DEBUG: Cache keys: {list(self._project_cache.keys())}")
-            except Exception as e:
-                print(f"Warning: Could not populate project cache: {e}")
-                # Continue without cache - will show "Unknown Project"
+
     
     async def get_all_projects(self, include_recent: bool = False) -> List[Dict]:
         """Get all projects grouped by their group name"""
@@ -223,7 +193,6 @@ class FreedcampMCP:
             
             if response["data"].get("projects"):
                 for project in response["data"]["projects"]:
-                    print(f"DEBUG: Raw project data: {project}")
                     group_name = project.get("group_name", "Ungrouped")
                     
                     simplified_project = {
@@ -496,8 +465,6 @@ class FreedcampMCP:
                           include_custom_fields: bool = False,
                           include_tags: bool = False) -> Dict:
         """Get all tasks with comprehensive filtering and pagination"""
-        # Populate project cache for name mapping
-        await self._populate_project_cache()
         
         params = {
             "limit": str(limit),
@@ -577,8 +544,6 @@ class FreedcampMCP:
                               include_custom_fields: bool = False,
                               include_tags: bool = False) -> Dict:
         """Get tasks for a specific project with enhanced filtering"""
-        # Populate project cache for name mapping
-        await self._populate_project_cache()
         
         params = {
             "project_id": project_id,
@@ -635,8 +600,6 @@ class FreedcampMCP:
                            due_date_to: Optional[str] = None,
                            include_custom_fields: bool = False) -> Dict:
         """Get tasks assigned to a specific user with enhanced filtering"""
-        # Populate project cache for name mapping
-        await self._populate_project_cache()
         
         params = {
             "assigned_to_id[]": user_id,
