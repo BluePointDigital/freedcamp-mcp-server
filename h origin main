@@ -1,3 +1,0 @@
-[33me6bcaf2[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m  MAJOR FIX: Project names now display correctly!
-[33md8a3036[m  ROBUST FIX: Handle both API date formats (documentation vs reality)
-[33m8a9a7bc[m  FIXED: Due dates now display correctly!

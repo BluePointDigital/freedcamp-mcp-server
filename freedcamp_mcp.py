@@ -153,12 +153,25 @@ class FreedcampMCP:
             if not hasattr(self, '_project_lookup'):
                 # Create a simple lookup table only when first needed
                 self._project_lookup = {}
-                projects = await self.get_all_projects()
-                for project in projects:
-                    self._project_lookup[str(project.get("id"))] = project.get("name", "Unknown Project")
+                grouped_data = await self.get_all_projects()
+                print(f"DEBUG: _get_project_name - fetched {len(grouped_data)} groups")
+                
+                # Extract projects from grouped structure
+                for group_data in grouped_data:
+                    if "projects" in group_data:
+                        for project in group_data["projects"]:
+                            proj_id = str(project.get("id"))
+                            proj_name = project.get("name", "Unknown Project")
+                            self._project_lookup[proj_id] = proj_name
+                            print(f"DEBUG: _get_project_name - cached {proj_id} -> {proj_name}")
+                
+                print(f"DEBUG: _get_project_name - lookup table created with {len(self._project_lookup)} entries")
             
-            return self._project_lookup.get(str(project_id), "Unknown Project")
-        except Exception:
+            result = self._project_lookup.get(str(project_id), "Unknown Project")
+            print(f"DEBUG: _get_project_name - looking up {project_id} -> {result}")
+            return result
+        except Exception as e:
+            print(f"DEBUG: _get_project_name - ERROR: {e}")
             return "Unknown Project"
     
     def _format_minimal_task(self, task: Dict) -> Dict:
