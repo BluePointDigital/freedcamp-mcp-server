@@ -152,6 +152,16 @@ class FreedcampMCP:
         # Convert due_ts (timestamp) to readable date format
         due_date = self._format_date(task.get("due_ts", 0)) or None
         
+        # DEBUG: Let's see what date fields are actually in the response
+        debug_info = {
+            "due_ts": task.get("due_ts"),
+            "due_date": task.get("due_date"), 
+            "start_ts": task.get("start_ts"),
+            "start_date": task.get("start_date"),
+            "created_ts": task.get("created_ts"),
+            "all_date_keys": [key for key in task.keys() if 'date' in key.lower() or 'ts' in key.lower() or 'time' in key.lower()]
+        }
+        
         result = {
             "id": task["id"],
             "title": task["title"],
@@ -162,7 +172,8 @@ class FreedcampMCP:
             "project_id": task.get("project_id"),
             "project_name": task.get("project_name", "Unknown Project"),
             "task_group_name": task.get("task_group_name"),
-            "url": task.get("url", "")
+            "url": task.get("url", ""),
+            "_debug_date_info": debug_info  # DEBUG: Need this to fix due dates!
         }
         
         return result
