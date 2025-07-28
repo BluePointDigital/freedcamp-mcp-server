@@ -147,6 +147,20 @@ class FreedcampMCP:
             "group": project.get("group", project.get("group_name", "Ungrouped"))
         }
     
+    async def _get_project_name(self, project_id: str) -> str:
+        """Get project name by ID - simple lookup when needed"""
+        try:
+            if not hasattr(self, '_project_lookup'):
+                # Create a simple lookup table only when first needed
+                self._project_lookup = {}
+                projects = await self.get_all_projects()
+                for project in projects:
+                    self._project_lookup[str(project.get("id"))] = project.get("name", "Unknown Project")
+            
+            return self._project_lookup.get(str(project_id), "Unknown Project")
+        except Exception:
+            return "Unknown Project"
+    
     def _format_minimal_task(self, task: Dict) -> Dict:
         """Essential task fields for browsing/listing - optimized for token efficiency"""
         # Handle both date formats: API docs say due_ts (timestamp) but actual API returns due_date (string)
@@ -160,7 +174,7 @@ class FreedcampMCP:
             "assigned_to_fullname": task.get("assigned_to_fullname", "Unassigned"),
             "due_date": due_date,
             "project_id": task.get("project_id"),
-            "project_name": task.get("project_name", "Unknown Project"),
+            "project_name": task.get("project_name", "Unknown Project"),  # Will be updated after formatting
             "task_group_name": task.get("task_group_name"),
             "url": task.get("url", "")
         }
@@ -1289,6 +1303,12 @@ class FreedcampMCP:
                     # Create minimal version for discovery
                     tasks = result.get("tasks", [])
                     minimal_tasks = [self._format_minimal_task(task) for task in tasks]
+                    
+                    # Populate project names for each task
+                    for task in minimal_tasks:
+                        if task.get("project_id"):
+                            task["project_name"] = await self._get_project_name(task["project_id"])
+                    
                     total_count = result.get("meta", {}).get("total", len(tasks))
                     
                     minimal_result = {
@@ -1331,6 +1351,12 @@ class FreedcampMCP:
                     # Create minimal version for discovery
                     tasks = result.get("tasks", [])
                     minimal_tasks = [self._format_minimal_task(task) for task in tasks]
+                    
+                    # Populate project names for each task
+                    for task in minimal_tasks:
+                        if task.get("project_id"):
+                            task["project_name"] = await self._get_project_name(task["project_id"])
+                    
                     total_count = result.get("meta", {}).get("total", len(tasks))
                     
                     minimal_result = {
@@ -1376,6 +1402,12 @@ class FreedcampMCP:
                     # Create minimal version for discovery
                     tasks = result.get("tasks", [])
                     minimal_tasks = [self._format_minimal_task(task) for task in tasks]
+                    
+                    # Populate project names for each task
+                    for task in minimal_tasks:
+                        if task.get("project_id"):
+                            task["project_name"] = await self._get_project_name(task["project_id"])
+                    
                     total_count = result.get("meta", {}).get("total", len(tasks))
                     
                     minimal_result = {
@@ -1419,6 +1451,11 @@ class FreedcampMCP:
                         return json.dumps({"error": f"Task {task_id} not found"}, indent=2)
                     
                     minimal_task = self._format_minimal_task(result)
+                    
+                    # Populate project name for this task
+                    if minimal_task.get("project_id"):
+                        minimal_task["project_name"] = await self._get_project_name(minimal_task["project_id"])
+                    
                     # Add a few extra fields for single task view
                     minimal_task["url"] = result.get("url", "")
                     minimal_task["comments_count"] = result.get("comments_count", 0)
